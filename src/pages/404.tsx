@@ -23,8 +23,7 @@ const ErrorPage: NextPageWithLayout = () => {
           Error! No Result Found
         </h2>
         <p className="mb-4 max-w-full text-xs leading-loose tracking-tight text-gray-600 dark:text-gray-400 sm:mb-6 sm:w-[430px] sm:text-sm sm:leading-loose">
-          Sorry, the page you are looking for might be renamed, removed, or
-          might never exist.
+          Sorry, the waffle you were looking for is missing, please redirect to the wafle you were at before.
         </p>
    
 
