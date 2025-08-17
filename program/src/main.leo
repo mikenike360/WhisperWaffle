@@ -1,178 +1,164 @@
+import credits.aleo;
+import token_registry.aleo;
 
-program zkontractv5.aleo {
+program ww_swap_v2.aleo {
+    // USDC token ID on Aleo (as provided)
+    const VUSDC_ID: field = 3443843282313283355522573239085696902919850365217539366784739393210722344986field;
 
-    const contract_owner: address = aleo1xh0ncflwkfzga983lwujsha729c8nwu7phfn8aw7h3gahhj0ms8qytrxec;
-
-    const BOUNTY_STATUS_OPEN: u8 = 0u8;
-    const BOUNTY_STATUS_COMPLETED: u8 = 1u8;
-
-    const PROPOSAL_STATUS_PENDING: u8 = 0u8;
-    const PROPOSAL_STATUS_ACCEPTED: u8 = 1u8;
-    const PROPOSAL_STATUS_DENIED: u8 = 2u8;
-
-    mapping bounty_creator: u64 => address;
-    mapping bounty_payment: u64 => u64;
-    mapping bounty_status: u64 => u8;
-
-    mapping proposal_bounty_id: u64 => u64;
-    mapping proposal_proposer: u64 => address;
-    mapping proposal_status: u64 => u8;
-
-    mapping all_bounties: u64 => bool;
-    mapping bounty_output_payment: u64 => u64;
-    mapping bounty_output_status: u64 => u8;
-    mapping account: address => u64;
-
-
-
-    // Async function to set bounty details
-    async function finalize_post_bounty(
-        bounty_id: u64,
-        creator_address: address,
-        payment_amount: u64
-    ) {
-        assert(!bounty_creator.contains(bounty_id)); // Ensure bounty ID is unique.
-
-        bounty_creator.set(bounty_id, creator_address);
-        bounty_payment.set(bounty_id, payment_amount);
-        bounty_status.set(bounty_id, BOUNTY_STATUS_OPEN);
-
-        all_bounties.set(bounty_id, true);
+    struct Pair {
+        reserve_aleo: u128,
+        reserve_usdc: u128,
     }
 
-    // Transition to post a bounty
-    async transition post_bounty(
-        caller: address,
-        bounty_id: u64,
-        creator_address: address,
-        payment_amount: u64
+    // Pool state is stored in mapping `pool_state` keyed by a single byte `0u8`.
+    mapping pool_state: u8 => Pair;
+
+    // This constructor is required for all Leo programs
+    // @noupgrade makes the program non-upgradable
+    @noupgrade
+    async constructor() {
+        // The Leo compiler automatically generates the constructor logic
+    }
+
+    // Initialize the pool with starting reserves.
+    async transition initialise_pool(
+        public aleo_in: u64,
+        public usdc_in: u128
     ) -> Future {
-        assert_eq(caller, creator_address); // Ensure the caller is the creator.
+        let new_ra: u128 = aleo_in as u128;
+        let new_rb: u128 = usdc_in;
 
-        // Call the async function to finalize posting the bounty
-        let post_bounty_future: Future = finalize_post_bounty(bounty_id, creator_address, payment_amount);
-        return post_bounty_future;
+        return async {
+            let current: Pair = Mapping::get_or_use(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128 }
+            );
+            assert(current.reserve_aleo == 0u128 && current.reserve_usdc == 0u128);
+            Mapping::set(pool_state, 0u8, Pair { reserve_aleo: new_ra, reserve_usdc: new_rb });
+        };
     }
 
-    async function finalize_view_bounty_by_id(bounty_id: u64) {
-        // Ensure the bounty exists
-        assert(bounty_creator.contains(bounty_id));
-
-        // Retrieve bounty details
-        let payment: u64 = bounty_payment.get(bounty_id);
-        let status: u8 = bounty_status.get(bounty_id);
-
-        // Store results in output mappings
-        bounty_output_payment.set(bounty_id, payment);
-        bounty_output_status.set(bounty_id, status);
-    }
-
-    async transition view_bounty_by_id(bounty_id: u64) -> Future {
-        // Call the finalize function
-        let finalize_future: Future = finalize_view_bounty_by_id(bounty_id);
-        return finalize_future;
-    }
-
-    // Async function to finalize proposal submission
-    async function finalize_submit_proposal(
-        composite_proposal_id: u64,
-        bounty_id: u64,
-        proposer_address: address
-    ) {
-        assert(bounty_creator.contains(bounty_id)); // Ensure bounty exists.
-        assert(!proposal_bounty_id.contains(composite_proposal_id)); // Ensure proposal ID is unique.
-
-        proposal_bounty_id.set(composite_proposal_id, bounty_id);
-        proposal_proposer.set(composite_proposal_id, proposer_address);
-        proposal_status.set(composite_proposal_id, PROPOSAL_STATUS_PENDING);
-    }
-
-    // Transition to submit a proposal
-    async transition submit_proposal(
-        caller: address,
-        bounty_id: u64,
-        proposal_id: u64,
-        proposer_address: address
+    // Swap public ALEO for private USDC.
+    async transition swap_public_for_private(
+        public aleo_in: u64,
+        public ra: u128,
+        public rb: u128,
+        min_out: u128,
+        recipient: address
     ) -> Future {
-        assert_eq(caller, proposer_address); // Ensure the caller is the proposer.
+        let amount_in: u128 = aleo_in as u128;
+        assert(ra > 0u128 && rb > 0u128);
 
-        let composite_proposal_id: u64 = bounty_id * 1000000u64 + proposal_id;
+        let in_fee: u128 = amount_in * 997u128;
+        let out_amt: u128 = (in_fee * rb) / (ra * 1000u128 + in_fee);
+        assert(out_amt >= min_out);
 
-        // Call the async function to finalize the proposal submission
-        let submit_proposal_future: Future = finalize_submit_proposal(composite_proposal_id, bounty_id, proposer_address);
-        return submit_proposal_future;
+        let new_ra: u128 = ra + amount_in;
+        let new_rb: u128 = rb - out_amt;
+
+        // Call external async transition; destructure (Token, Future).
+        let (ignored_token, f_transfer) = token_registry.aleo/transfer_public_to_private(
+            VUSDC_ID,
+            recipient,
+            out_amt,
+            false
+        );
+
+        // Return one async Future that first performs the external transfer, then updates state.
+        return async {
+            f_transfer.await();
+
+            let current: Pair = Mapping::get_or_use(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128 }
+            );
+            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
+
+            Mapping::set(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: new_ra, reserve_usdc: new_rb }
+            );
+        };
     }
 
-    // Async function to finalize proposal acceptance
-    async function finalize_accept_proposal(
-        bounty_id: u64,
-        composite_proposal_id: u64
-    ) {
-        assert(bounty_creator.contains(bounty_id)); // Ensure bounty exists.
-        assert(proposal_bounty_id.contains(composite_proposal_id)); // Ensure proposal exists.
-
-        bounty_status.set(bounty_id, BOUNTY_STATUS_COMPLETED);
-        proposal_status.set(composite_proposal_id, PROPOSAL_STATUS_ACCEPTED);
-
-    }
-
-    // Transition to accept a proposal
-    async transition accept_proposal(
-        caller: address,
-        bounty_id: u64,
-        proposal_id: u64,
-        creator_address: address,
-        payment_amount: u64
+    // Swap private credits for private USDC.
+    async transition swap_private_for_private(
+        private credit_in: credits.aleo/credits,
+        public ra: u128,
+        public rb: u128,
+        min_out: u128,
+        recipient: address
     ) -> Future {
-        let composite_proposal_id: u64 = bounty_id * 1000000u64 + proposal_id;
+        let amount_in: u128 = credit_in.microcredits as u128;
+        assert(ra > 0u128 && rb > 0u128);
 
-        // Call the async function to finalize the proposal acceptance
-        let accept_proposal_future: Future = finalize_accept_proposal(bounty_id, composite_proposal_id);
-        return accept_proposal_future;
-        
+        let in_fee: u128 = amount_in * 997u128;
+        let out_amt: u128 = (in_fee * rb) / (ra * 1000u128 + in_fee);
+        assert(out_amt >= min_out);
+
+        let new_ra: u128 = ra + amount_in;
+        let new_rb: u128 = rb - out_amt;
+
+        // External async transition; destructure (Token, Future).
+        let (ignored_token2, f_transfer2) = token_registry.aleo/transfer_public_to_private(
+            VUSDC_ID,
+            recipient,
+            out_amt,
+            false
+        );
+
+        return async {
+            f_transfer2.await();
+
+            let current: Pair = Mapping::get_or_use(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128 }
+            );
+            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
+
+            Mapping::set(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: new_ra, reserve_usdc: new_rb }
+            );
+        };
     }
 
-    // Async function to finalize proposal denial
-    async function finalize_deny_proposal(
-        composite_proposal_id: u64
-    ) {
-        assert(proposal_bounty_id.contains(composite_proposal_id)); // Ensure the proposal exists.
-
-        proposal_status.set(composite_proposal_id, PROPOSAL_STATUS_DENIED);
-    }
-
-    // Transition function to deny a proposal
-    async transition deny_proposal(
-        caller: address,
-        bounty_id: u64,
-        proposal_id: u64
+    // Swap public ALEO for public USDC (easier to test and use)
+    async transition swap_public_for_public(
+        public aleo_in: u64,
+        public ra: u128,
+        public rb: u128,
+        public min_out: u128
     ) -> Future {
-        let composite_proposal_id: u64 = bounty_id * 1000000u64 + proposal_id;
+        let amount_in: u128 = aleo_in as u128;
+        assert(ra > 0u128 && rb > 0u128);
 
-        let deny_proposal_future: Future = finalize_deny_proposal(composite_proposal_id);
-        return deny_proposal_future;
+        let in_fee: u128 = amount_in * 997u128;
+        let out_amt: u128 = (in_fee * rb) / (ra * 1000u128 + in_fee);
+        assert(out_amt >= min_out);
+
+        let new_ra: u128 = ra + amount_in;
+        let new_rb: u128 = rb - out_amt;
+
+        // Return async future that updates the pool state
+        return async {
+            let current: Pair = Mapping::get_or_use(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128 }
+            );
+            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
+
+            Mapping::set(
+                pool_state,
+                0u8,
+                Pair { reserve_aleo: new_ra, reserve_usdc: new_rb }
+            );
+        };
     }
-
-
-    // Async function to finalize bounty deletion
-    async function finalize_delete_bounty(bounty_id: u64) {
-        assert(bounty_creator.contains(bounty_id)); // Ensure bounty exists.
-
-        bounty_creator.remove(bounty_id);
-        bounty_payment.remove(bounty_id);
-        bounty_status.remove(bounty_id);
-    }
-
-        // Transition to delete a bounty
-        async transition delete_bounty(
-            caller: address,
-            bounty_id: u64
-        ) -> Future {
-            let delete_bounty_future: Future = finalize_delete_bounty(bounty_id);
-            return delete_bounty_future;
-        }
-
-
-        
-
 }
