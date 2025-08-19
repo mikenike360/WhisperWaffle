@@ -5,10 +5,7 @@ import Button from '@/components/ui/button';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { WalletNotConnectedError } from '@demox-labs/aleo-wallet-adapter-base';
 import { useRouter } from 'next/router';
-import dynamic from 'next/dynamic';
-
-// Uncomment this line to enable the animated background ✨
-// const GLSLBackground = dynamic(() => import('../utils/GLSLBackground'), { ssr: false });
+import Link from 'next/link';
 
 const MainPage: NextPageWithLayout = () => {
   const { publicKey } = useWallet();
@@ -40,20 +37,60 @@ const MainPage: NextPageWithLayout = () => {
         description="A sophisticated, privacy-first decentralized exchange built on Aleo with advanced swap mechanics, liquidity provision, and enhanced safety features."
       />
 
-      {/* Optional: Background animation */}
-      {/* <GLSLBackground /> */}
-
       <div className="min-h-screen bg-gradient-to-br from-primary via-primary-focus to-primary-content">
         {/* Hero Section */}
         <div className="relative z-20 flex flex-col items-center justify-center min-h-screen px-4 py-16 text-center">
           {/* Main Title */}
           <div className="mb-8">
-            <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-primary-content mb-4">
-              🧇 WhisperWaffle
-            </h1>
+            <div className="flex items-center justify-center gap-4 mb-4">
+              <img src="/waffle_bro.png" alt="Waffle Bro" className="w-20 h-20 object-contain" />
+              <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-primary-content">
+                🧇 WhisperWaffle
+              </h1>
+              <img src="/syrup_bro.png" alt="Syrup Bro" className="w-20 h-20 object-contain" />
+            </div>
             <p className="text-xl md:text-2xl text-primary-content/90 max-w-3xl mx-auto leading-relaxed">
               Where privacy meets DeFi. Advanced Aleo DEX with enterprise-grade safety features.
             </p>
+          </div>
+
+          {/* Character Showcase */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 max-w-6xl w-full">
+            <div className="text-center">
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-4 border border-white/20">
+                <img 
+                  src="/waffle_bro.png" 
+                  alt="Waffle Bro" 
+                  className="w-32 h-32 mx-auto mb-4 object-contain"
+                />
+                <h3 className="text-xl font-semibold text-white mb-2">Waffle Bro</h3>
+                <p className="text-white/80">Your trusty trading companion</p>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-4 border border-white/20">
+                <img 
+                  src="/syrup_bro.png" 
+                  alt="Syrup Bro" 
+                  className="w-32 h-32 mx-auto mb-4 object-contain"
+                />
+                <h3 className="text-xl font-semibold text-white mb-2">Syrup Bro</h3>
+                <p className="text-white/80">Sweet liquidity management</p>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-4 border border-white/20">
+                <img 
+                  src="/butter_baby.png" 
+                  alt="Butter Baby" 
+                  className="w-32 h-32 mx-auto mb-4 object-contain"
+                />
+                <h3 className="text-xl font-semibold text-white mb-2">Butter Baby</h3>
+                <p className="text-white/80">Smooth trading experience</p>
+              </div>
+            </div>
           </div>
 
           {/* Feature Highlights */}
@@ -158,12 +195,39 @@ const MainPage: NextPageWithLayout = () => {
           </div>
         </div>
 
-        {/* Floating Elements */}
+        {/* Static Waffles */}
         <div className="fixed inset-0 pointer-events-none z-10">
-          <div className="absolute top-20 left-10 text-4xl opacity-20 animate-bounce">🧇</div>
-          <div className="absolute top-40 right-20 text-3xl opacity-20 animate-pulse">🔐</div>
-          <div className="absolute bottom-40 left-20 text-3xl opacity-20 animate-bounce delay-1000">🔄</div>
-          <div className="absolute bottom-20 right-10 text-4xl opacity-20 animate-pulse delay-500">🛡️</div>
+          {/* Corner waffles */}
+          <div className="absolute top-10 left-10 text-3xl opacity-20">🧇</div>
+          <div className="absolute top-10 right-10 text-3xl opacity-20">🧇</div>
+          <div className="absolute bottom-10 left-10 text-3xl opacity-20">🧇</div>
+          <div className="absolute bottom-10 right-10 text-3xl opacity-20">🧇</div>
+          
+          {/* Side waffles */}
+          <div className="absolute top-1/4 left-5 text-2xl opacity-15">🧇</div>
+          <div className="absolute top-1/3 right-5 text-2xl opacity-15">🧇</div>
+          <div className="absolute bottom-1/4 left-5 text-2xl opacity-15">🧇</div>
+          <div className="absolute bottom-1/3 right-5 text-2xl opacity-15">🧇</div>
+          
+          {/* Center area waffles */}
+          <div className="absolute top-1/2 left-1/4 text-xl opacity-10">🧇</div>
+          <div className="absolute top-2/3 right-1/4 text-xl opacity-10">🧇</div>
+          <div className="absolute bottom-1/2 right-1/3 text-xl opacity-10">🧇</div>
+        </div>
+        
+        {/* Static Syrup Drops */}
+        <div className="fixed inset-0 pointer-events-none z-5">
+          {/* Top syrup */}
+          <div className="absolute top-5 left-1/4 text-lg opacity-30">🍁</div>
+          <div className="absolute top-5 right-1/3 text-lg opacity-30">🍁</div>
+          
+          {/* Side syrup */}
+          <div className="absolute top-1/3 left-3 text-lg opacity-25">🍁</div>
+          <div className="absolute bottom-1/3 right-3 text-lg opacity-25">🍁</div>
+          
+          {/* Bottom syrup */}
+          <div className="absolute bottom-5 left-1/3 text-lg opacity-30">🍁</div>
+          <div className="absolute bottom-5 right-1/4 text-lg opacity-30">🍁</div>
         </div>
       </div>
     </>

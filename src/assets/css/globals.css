@@ -41,6 +41,141 @@
     writing-mode: tb;
     text-orientation: upright;
   }
+  
+  /* Waffle Animations */
+  .animate-spin-slow {
+    animation: spin 3s linear infinite;
+  }
+  
+  .animate-waffle-float {
+    animation: waffle-float 4s ease-in-out infinite;
+  }
+  
+  .animate-waffle-bounce-gentle {
+    animation: waffle-bounce-gentle 2.5s ease-in-out infinite;
+  }
+  
+  .animate-waffle-rotate {
+    animation: waffle-rotate 5s linear infinite;
+  }
+  
+  /* Syrup Animations */
+  .animate-syrup-drip {
+    animation: syrup-drip 3s ease-in infinite;
+  }
+  
+  .animate-syrup-drop {
+    animation: syrup-drop 2.5s ease-out infinite;
+  }
+  
+  .animate-syrup-splash {
+    animation: syrup-splash 1.5s ease-out infinite;
+  }
+  
+  .animate-syrup-float {
+    animation: syrup-float 4s ease-in-out infinite;
+  }
+}
+
+/* Custom Waffle Keyframes */
+@keyframes waffle-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(5deg);
+  }
+}
+
+@keyframes waffle-bounce-gentle {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-15px) scale(1.1);
+  }
+}
+
+@keyframes waffle-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Custom Syrup Keyframes */
+@keyframes syrup-drip {
+  0% {
+    transform: translateY(-100px) scale(0.1);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-50px) scale(0.3);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(50px) scale(0.8);
+  }
+  100% {
+    transform: translateY(100px) scale(0.1);
+    opacity: 0;
+  }
+}
+
+@keyframes syrup-drop {
+  0% {
+    transform: translateY(-80px) scale(0.2);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-20px) scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(40px) scale(0.4);
+  }
+  100% {
+    transform: translateY(80px) scale(0.1);
+    opacity: 0;
+  }
+}
+
+@keyframes syrup-splash {
+  0% {
+    transform: scale(0.1) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(180deg);
+  }
+  100% {
+    transform: scale(0.1) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes syrup-float {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px) rotate(0deg);
+    opacity: 0.8;
+  }
+  25% {
+    transform: translateY(-15px) translateX(5px) rotate(5deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-25px) translateX(-3px) rotate(-3deg);
+    opacity: 0.9;
+  }
+  75% {
+    transform: translateY(-10px) translateX(8px) rotate(8deg);
+    opacity: 1;
+  }
 }
 
 /* Hide spin button for input type number */

@@ -331,24 +331,23 @@ const PoolPage: NextPageWithLayout = () => {
     <>
       <NextSeo title="Pool - WhisperWaffle" />
       <div
-        className="flex flex-col items-center justify-center min-h-screen"
-        style={{
-          backgroundImage: `url('waffle.png')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+        className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-primary via-primary-focus to-primary-content"
       >
         <div className="w-full max-w-2xl bg-white/90 backdrop-blur p-6 rounded-2xl shadow-lg">
+          {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold">WhisperWaffle Pool</h1>
+            <div className="flex items-center gap-3">
+              <img src="/syrup_bro.png" alt="Syrup Bro" className="w-12 h-12 object-contain" />
+              <h1 className="text-3xl font-bold text-gray-800">💧 Pool Management</h1>
+            </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={refreshPoolData}
-                className="text-sm px-3 py-1 rounded-lg border hover:bg-gray-50"
-                title="Refresh"
+              <a
+                href="/user-dashboard"
+                className="text-sm px-4 py-2 rounded-lg border hover:bg-gray-50 text-blue-600 font-medium"
+                title="Go to Dashboard"
               >
-                🔄
-              </button>
+                🏠 Dashboard
+              </a>
             </div>
           </div>
 
@@ -409,6 +408,34 @@ const PoolPage: NextPageWithLayout = () => {
               ← Back to Swap
             </a>
           </div>
+        </div>
+        
+        {/* Static Waffles */}
+        <div className="fixed inset-0 pointer-events-none z-10">
+          <div className="absolute top-20 left-10 text-2xl opacity-15">🧇</div>
+          <div className="absolute top-40 right-20 text-xl opacity-15">🧇</div>
+          <div className="absolute bottom-40 left-20 text-2xl opacity-15">🧇</div>
+          <div className="absolute bottom-20 right-10 text-xl opacity-15">🧇</div>
+        </div>
+        
+        {/* Character Images */}
+        <div className="fixed inset-0 pointer-events-none z-5">
+          <div className="absolute top-10 left-5 opacity-20">
+            <img src="/waffle_bro.png" alt="Waffle Bro" className="w-16 h-16 object-contain" />
+          </div>
+          <div className="absolute top-1/3 right-5 opacity-20">
+            <img src="/syrup_bro.png" alt="Syrup Bro" className="w-16 h-16 object-contain" />
+          </div>
+          <div className="absolute bottom-1/3 left-5 opacity-20">
+            <img src="/butter_baby.png" alt="Butter Baby" className="w-16 h-16 object-contain" />
+          </div>
+        </div>
+        
+        {/* Static Syrup Drops */}
+        <div className="fixed inset-0 pointer-events-none z-5">
+          <div className="absolute top-0 left-1/4 text-lg opacity-30">🍁</div>
+          <div className="absolute top-1/3 right-10 text-lg opacity-25">🍁</div>
+          <div className="absolute bottom-1/4 left-10 text-lg opacity-25">🍁</div>
         </div>
       </div>
     </>

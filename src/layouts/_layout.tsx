@@ -78,6 +78,27 @@ export function Header() {
     >
       <div className="flex flex-wrap items-center justify-between px-8 py-8 sm:px-6 lg:px-8 xl:px-10 3xl:px-12">
         <div className="flex items-center space-x-2">
+          {/* Home Button */}
+          <a
+            href="/"
+            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all flex items-center gap-2"
+          >
+            🏠 Home
+          </a>
+          {/* Add Dashboard Navigation Link */}
+          <a
+            href="/user-dashboard"
+            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
+          >
+            🥞 Swap
+          </a>
+          {/* Add Pool Navigation Link */}
+          <a
+            href="/pool"
+            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
+          >
+            💧 Pool
+          </a>
           {process.env.URL && (
             <a
               className="bg-base-300 bg-opacity-20 rounded-full p-2"
@@ -102,20 +123,6 @@ export function Header() {
               <Discord width="18" height="18" />
             </a>
           )}
-          {/* Add Dashboard Navigation Link */}
-          <a
-            href="/user-dashboard"
-            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
-          >
-            🥞 Swap
-          </a>
-          {/* Add Pool Navigation Link */}
-          <a
-            href="/pool"
-            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
-          >
-            💧 Pool
-          </a>
         </div>
         {/* Added a wrapper div with margin-left to create more space */}
         <div className="ml-2 mt-2">
