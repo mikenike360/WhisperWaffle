@@ -102,6 +102,20 @@ export function Header() {
               <Discord width="18" height="18" />
             </a>
           )}
+          {/* Add Dashboard Navigation Link */}
+          <a
+            href="/user-dashboard"
+            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
+          >
+            🥞 Swap
+          </a>
+          {/* Add Pool Navigation Link */}
+          <a
+            href="/pool"
+            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
+          >
+            💧 Pool
+          </a>
         </div>
         {/* Added a wrapper div with margin-left to create more space */}
         <div className="ml-2 mt-2">

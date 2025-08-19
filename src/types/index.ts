@@ -8,7 +8,7 @@ export const CURRENT_NETWORK: WalletAdapterNetwork = WalletAdapterNetwork.Testne
 
 //TESTNET_RPC_URL=https://testnetbeta.aleorpc.com
 //MAINNET_RPC_URL=https://mainnet.aleorpc.com
-export const CURRENT_RPC_URL = "https://testnetbeta.aleorpc.com";
+export const CURRENT_RPC_URL = "https://api.explorer.aleo.org/v1";
 
 export type NextPageWithLayout<P = {}> = NextPage<P> & {
   authorization?: boolean;
@@ -36,4 +36,4 @@ export type BountyData = {
   proposals?: ProposalData[];
 };
 
-export const BOUNTY_PROGRAM_ID = 'zkontract.aleo';
+export const PROGRAM_ID = 'ww_swap_v3.aleo';
