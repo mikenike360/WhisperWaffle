@@ -6,10 +6,12 @@ import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { WalletNotConnectedError } from '@demox-labs/aleo-wallet-adapter-base';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { useRandomImages } from '@/utils/useRandomImages';
 
 const MainPage: NextPageWithLayout = () => {
   const { publicKey } = useWallet();
   const router = useRouter();
+  const { randomImages, isClient, isRandomizing } = useRandomImages();
 
   const handleButtonClick = async () => {
     try {
@@ -43,55 +45,39 @@ const MainPage: NextPageWithLayout = () => {
           {/* Main Title */}
           <div className="mb-8">
             <div className="flex items-center justify-center gap-4 mb-4">
-              <img src="/waffle_bro.png" alt="Waffle Bro" className="w-20 h-20 object-contain" />
-              <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-primary-content">
-                🧇 WhisperWaffle
-              </h1>
-              <img src="/syrup_bro.png" alt="Syrup Bro" className="w-20 h-20 object-contain" />
+              <img src={randomImages.header.src} alt={randomImages.header.alt} className="w-20 h-20 object-contain" />
+              <img src="/logo.png" alt="WhisperWaffle Logo" className="h-32 md:h-40 lg:h-48 object-contain" />
+              <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-20 h-20 object-contain" />
             </div>
             <p className="text-xl md:text-2xl text-primary-content/90 max-w-3xl mx-auto leading-relaxed">
               Where privacy meets DeFi. Advanced Aleo DEX with enterprise-grade safety features.
             </p>
           </div>
 
-          {/* Character Showcase */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 max-w-6xl w-full">
+          {/* Single Character Showcase */}
+          <div className="mb-16 max-w-2xl w-full">
             <div className="text-center">
-              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-4 border border-white/20">
+              <div className={`bg-white/10 backdrop-blur rounded-2xl p-8 mb-4 border border-white/20 transition-all duration-300 ${isRandomizing ? 'animate-pulse scale-105' : ''}`}>
                 <img 
-                  src="/waffle_bro.png" 
-                  alt="Waffle Bro" 
-                  className="w-32 h-32 mx-auto mb-4 object-contain"
+                  src={randomImages.background2.src} 
+                  alt={randomImages.background2.alt} 
+                  className="w-40 h-40 mx-auto mb-6 object-contain"
                 />
-                <h3 className="text-xl font-semibold text-white mb-2">Waffle Bro</h3>
-                <p className="text-white/80">Your trusty trading companion</p>
-              </div>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-4 border border-white/20">
-                <img 
-                  src="/syrup_bro.png" 
-                  alt="Syrup Bro" 
-                  className="w-32 h-32 mx-auto mb-4 object-contain"
-                />
-                <h3 className="text-xl font-semibold text-white mb-2">Syrup Bro</h3>
-                <p className="text-white/80">Sweet liquidity management</p>
-              </div>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-4 border border-white/20">
-                <img 
-                  src="/butter_baby.png" 
-                  alt="Butter Baby" 
-                  className="w-32 h-32 mx-auto mb-4 object-contain"
-                />
-                <h3 className="text-xl font-semibold text-white mb-2">Butter Baby</h3>
-                <p className="text-white/80">Smooth trading experience</p>
+                <h3 className="text-2xl font-semibold text-white mb-3">{randomImages.background2.name}</h3>
+                <p className="text-white/80 text-lg">Your trusty DeFi companion</p>
               </div>
             </div>
           </div>
+
+          {/* Randomizing Indicator */}
+          {isRandomizing && (
+            <div className="mb-6 text-center">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-white/90 text-sm">
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                <span>🎲 Randomizing character...</span>
+              </div>
+            </div>
+          )}
 
           {/* Feature Highlights */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-5xl w-full">
@@ -195,38 +181,19 @@ const MainPage: NextPageWithLayout = () => {
           </div>
         </div>
 
-        {/* Static Waffles */}
+        {/* Minimal Static Waffles */}
         <div className="fixed inset-0 pointer-events-none z-10">
-          {/* Corner waffles */}
+          {/* Corner waffles only */}
           <div className="absolute top-10 left-10 text-3xl opacity-20">🧇</div>
           <div className="absolute top-10 right-10 text-3xl opacity-20">🧇</div>
           <div className="absolute bottom-10 left-10 text-3xl opacity-20">🧇</div>
           <div className="absolute bottom-10 right-10 text-3xl opacity-20">🧇</div>
-          
-          {/* Side waffles */}
-          <div className="absolute top-1/4 left-5 text-2xl opacity-15">🧇</div>
-          <div className="absolute top-1/3 right-5 text-2xl opacity-15">🧇</div>
-          <div className="absolute bottom-1/4 left-5 text-2xl opacity-15">🧇</div>
-          <div className="absolute bottom-1/3 right-5 text-2xl opacity-15">🧇</div>
-          
-          {/* Center area waffles */}
-          <div className="absolute top-1/2 left-1/4 text-xl opacity-10">🧇</div>
-          <div className="absolute top-2/3 right-1/4 text-xl opacity-10">🧇</div>
-          <div className="absolute bottom-1/2 right-1/3 text-xl opacity-10">🧇</div>
         </div>
         
-        {/* Static Syrup Drops */}
+        {/* Minimal Static Syrup Drops */}
         <div className="fixed inset-0 pointer-events-none z-5">
-          {/* Top syrup */}
+          {/* Just a few syrup drops */}
           <div className="absolute top-5 left-1/4 text-lg opacity-30">🍁</div>
-          <div className="absolute top-5 right-1/3 text-lg opacity-30">🍁</div>
-          
-          {/* Side syrup */}
-          <div className="absolute top-1/3 left-3 text-lg opacity-25">🍁</div>
-          <div className="absolute bottom-1/3 right-3 text-lg opacity-25">🍁</div>
-          
-          {/* Bottom syrup */}
-          <div className="absolute bottom-5 left-1/3 text-lg opacity-30">🍁</div>
           <div className="absolute bottom-5 right-1/4 text-lg opacity-30">🍁</div>
         </div>
       </div>

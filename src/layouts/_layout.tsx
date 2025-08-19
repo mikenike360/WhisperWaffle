@@ -99,6 +99,13 @@ export function Header() {
           >
             💧 Pool
           </a>
+          {/* Add Admin Navigation Link */}
+          <a
+            href="/admin"
+            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
+          >
+            🛠️ Admin
+          </a>
           {process.env.URL && (
             <a
               className="bg-base-300 bg-opacity-20 rounded-full p-2"

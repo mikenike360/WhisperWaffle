@@ -4,10 +4,12 @@ import Layout from '@/layouts/_layout';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import React, { useState } from 'react';
 import { SwapTab, PoolTab, BalancesTab, SettingsTab } from '@/components/dashboard';
+import { useRandomImages } from '@/utils/useRandomImages';
 
 const SwapPage: NextPageWithLayout = () => {
   const { publicKey } = useWallet();
   const [activeTab, setActiveTab] = useState<'swap' | 'pool' | 'balances' | 'settings'>('swap');
+  const { randomImages, isClient } = useRandomImages();
 
   return (
     <div>
@@ -17,7 +19,7 @@ const SwapPage: NextPageWithLayout = () => {
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <img src="/waffle_bro.png" alt="Waffle Bro" className="w-12 h-12 object-contain" />
+              <img src={randomImages.header.src} alt={randomImages.header.alt} className="w-12 h-12 object-contain" />
               <h1 className="text-3xl font-bold text-gray-800">🧇 WhisperWaffle Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
@@ -95,13 +97,13 @@ const SwapPage: NextPageWithLayout = () => {
         {/* Character Images */}
         <div className="fixed inset-0 pointer-events-none z-5">
           <div className="absolute top-10 left-5 opacity-20">
-            <img src="/waffle_bro.png" alt="Waffle Bro" className="w-16 h-16 object-contain" />
+            <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-16 h-16 object-contain" />
           </div>
           <div className="absolute top-1/3 right-5 opacity-20">
-            <img src="/syrup_bro.png" alt="Syrup Bro" className="w-16 h-16 object-contain" />
+            <img src={randomImages.background2.src} alt={randomImages.background2.alt} className="w-16 h-16 object-contain" />
           </div>
           <div className="absolute bottom-1/3 left-5 opacity-20">
-            <img src="/butter_baby.png" alt="Butter Baby" className="w-16 h-16 object-contain" />
+            <img src={randomImages.background3.src} alt={randomImages.background3.alt} className="w-16 h-16 object-contain" />
           </div>
         </div>
         

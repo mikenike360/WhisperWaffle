@@ -61,8 +61,8 @@ export const usePoolData = () => {
 // Real Aleo RPC implementation using working endpoints
 export const fetchRealPoolData = async (): Promise<PoolData> => {
   try {
-    // Use the working endpoint we discovered: /testnet/program/ww_swap_v2.aleo/mapping/pool_state/0u8
-    const response = await fetch(`https://api.explorer.aleo.org/v1/testnet/program/ww_swap_v2.aleo/mapping/pool_state/0u8`);
+    // Use the working endpoint for v3 program: /testnet/program/ww_swap_v3.aleo/mapping/pool_state/0u8
+    const response = await fetch(`https://api.explorer.aleo.org/v1/testnet/program/ww_swap_v3.aleo/mapping/pool_state/0u8`);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -93,9 +93,19 @@ export const fetchRealPoolData = async (): Promise<PoolData> => {
       console.log(`Parsed pool data: ra=${ra}, rb=${rb}`);
     }
     
-    // Validate the data
+    // Handle uninitialized pool (both reserves are 0)
+    if (ra === 0 && rb === 0) {
+      console.log('Pool is not initialized yet');
+      return {
+        ra: 0,
+        rb: 0,
+        lastUpdated: Date.now(),
+      };
+    }
+    
+    // Validate that we have valid pool data (at least one reserve > 0)
     if (ra === 0 || rb === 0) {
-      throw new Error('Invalid pool data received from blockchain');
+      throw new Error('Invalid pool data received from blockchain - only one reserve is zero');
     }
     
     return {

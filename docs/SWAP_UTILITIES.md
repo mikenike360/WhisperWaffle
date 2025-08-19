@@ -1,6 +1,6 @@
 # WhisperWaffle Swap Utilities
 
-This document describes the utility functions created to interact with the `ww_swap_v2.aleo` Leo program.
+This document describes the utility functions created to interact with the `ww_swap_v3.aleo` Leo program.
 
 ## Overview
 
