@@ -85,8 +85,8 @@ export async function fetchTokenBalance(
       console.log(`${symbol} balance data:`, balanceData);
       
       if (balanceData && balanceData.amount) {
-        // Convert based on token decimals (assuming 6 for USDC, 18 for ETH)
-        const decimals = symbol === 'USDC' ? 6 : 18;
+        // Convert based on token decimals (assuming 6 for USDC)
+        const decimals = 6;
         const amount = parseInt(balanceData.amount);
         return (amount / Math.pow(10, decimals)).toFixed(decimals === 6 ? 2 : 4);
       }
@@ -102,6 +102,27 @@ export async function fetchTokenBalance(
   } catch (error) {
     console.error(`Error fetching ${symbol} balance:`, error);
     return symbol === 'USDC' ? '0.00' : '0.0000';
+  }
+}
+
+/**
+ * Fetch custom token balance from token_registry.aleo
+ * This queries the specific token ID you minted
+ */
+export async function fetchCustomTokenBalance(
+  publicKey: string
+): Promise<string> {
+  try {
+    // For now, return a mock balance since we need to implement proper decryption
+    // TODO: Implement actual balance fetching from token_registry.aleo
+    console.log('Fetching custom token balance for:', publicKey);
+    
+    // Mock balance for testing - replace with actual implementation
+    return '1001.00'; // Your minted 1001 tokens
+    
+  } catch (error) {
+    console.error('Error fetching custom token balance:', error);
+    return '0.00';
   }
 }
 
@@ -138,14 +159,14 @@ export async function decryptBalanceRecords(
 export async function fetchAllBalances(
   wallet: LeoWalletAdapter,
   publicKey: string
-): Promise<{ ALEO: string; USDC: string; ETH: string }> {
+): Promise<{ ALEO: string; USDC: string }> {
   try {
     // Get ALEO balance from credits.aleo
     const aleoBalance = await fetchAleoBalance(publicKey);
     
     // Get token balances (these might also be encrypted records)
-    const usdcBalance = await fetchTokenBalance('usdc.aleo', publicKey, 'USDC');
-    const ethBalance = await fetchTokenBalance('eth.aleo', publicKey, 'ETH');
+    // For testing: using custom token instead of USDC
+    const usdcBalance = await fetchCustomTokenBalance(publicKey);
     
     // TODO: Implement proper decryption of encrypted records
     // For now, we're using direct queries which may not work for all tokens
@@ -153,14 +174,12 @@ export async function fetchAllBalances(
     return {
       ALEO: aleoBalance,
       USDC: usdcBalance,
-      ETH: ethBalance,
     };
   } catch (error) {
     console.error('Error fetching all balances:', error);
     return {
       ALEO: '0.000000',
       USDC: '0.00',
-      ETH: '0.0000',
     };
   }
 }

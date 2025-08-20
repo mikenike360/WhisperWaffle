@@ -30,7 +30,7 @@ const BalancesTab: React.FC = () => {
         ) : balancesError ? (
           <div className="text-center py-8 text-red-500">Error: {balancesError}</div>
         ) : balances ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 bg-white rounded-lg border text-center">
               <div className="text-2xl font-bold text-green-600 mb-2">{balances.ALEO}</div>
               <div className="text-sm text-gray-600">ALEO</div>
@@ -38,13 +38,8 @@ const BalancesTab: React.FC = () => {
             </div>
             <div className="p-4 bg-white rounded-lg border text-center">
               <div className="text-2xl font-bold text-blue-600 mb-2">{balances.USDC}</div>
-              <div className="text-sm text-gray-600">USDC</div>
-              <div className="text-xs text-blue-600 mt-1">🔵 Live</div>
-            </div>
-            <div className="p-4 bg-white rounded-lg border text-center">
-              <div className="text-2xl font-bold text-purple-600 mb-2">{balances.ETH}</div>
-              <div className="text-sm text-gray-600">ETH</div>
-              <div className="text-xs text-purple-600 mt-1">🟣 Live</div>
+              <div className="text-sm text-gray-600">Custom Token</div>
+              <div className="text-xs text-blue-600 mt-1">🔵 Test Mode</div>
             </div>
           </div>
         ) : (

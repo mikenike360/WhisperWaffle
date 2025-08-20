@@ -27,15 +27,13 @@ type Pool = {
 // Token list
 const TOKENS: Token[] = [
   { symbol: 'ALEO', name: 'Aleo', decimals: 9, icon: '/token-icons/aleo.svg' },
-  { symbol: 'USDC', name: 'USD Coin', decimals: 6, icon: '/token-icons/usdc.svg' },
-  { symbol: 'ETH', name: 'Ether', decimals: 18, icon: '/token-icons/eth.svg' },
+  { symbol: 'USDC', name: 'Custom Token (Test)', decimals: 6, icon: '/token-icons/usdc.svg' },
 ];
 
 // Mock balances
 const mockBalances: Record<string, string> = {
   ALEO: '1234.56789',
-  USDC: '2500',
-  ETH: '5.4321',
+  USDC: '1001.00', // Your minted custom tokens
 };
 
 // Helper functions
@@ -189,7 +187,7 @@ const SwapTab: React.FC = () => {
     <div className="space-y-6">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">Swap Tokens</h2>
-        <p className="text-gray-600">Trade ALEO, USDC, and other tokens with minimal slippage</p>
+        
       </div>
 
       {/* From */}

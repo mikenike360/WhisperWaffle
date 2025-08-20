@@ -10,6 +10,11 @@ export interface FeeMapping {
     // https://playground.aleo.org/
     transfer_public: 0.04406,
     transfer_private: 0.04406,
+    register_token: 0.5000, // Estimated fee for token registration (in credits)
+    mint_public: 0.5000, // Estimated fee for token minting (in credits)
+    add_liquidity: 0.06000, // Estimated fee for adding liquidity (in credits)
+    remove_liquidity: 0.06000, // Estimated fee for removing liquidity (in credits)
+    initialise_pool: 0.07000, // Estimated fee for pool initialization (in credits)
   };
   
   /**

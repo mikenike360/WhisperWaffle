@@ -14,19 +14,7 @@ require('@demox-labs/aleo-wallet-adapter-reactui/dist/styles.css');
 const themes = [
   "light",
   "dark",
-  "cupcake",
-  "bumblebee",
-  "emerald",
-  "forest",
-  "aqua",
-  "lofi",
-  "pastel",
-  "fantasy",
-  "wireframe",
-  "black",
-  "luxury",
-  "dracula",
-  "synthwave",
+  "cyberpunk",
 ];
 
 // ThemeSelector component using Next Themes
@@ -90,21 +78,15 @@ export function Header() {
             href="/user-dashboard"
             className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
           >
-            🥞 Swap
+            🧇 Dashboard
           </a>
-          {/* Add Pool Navigation Link */}
+
+          {/* Token Studio Navigation Link */}
           <a
-            href="/pool"
+            href="/token"
             className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
           >
-            💧 Pool
-          </a>
-          {/* Add Admin Navigation Link */}
-          <a
-            href="/admin"
-            className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
-          >
-            🛠️ Admin
+            🪙 Token
           </a>
           {process.env.URL && (
             <a

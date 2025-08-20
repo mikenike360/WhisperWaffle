@@ -25,7 +25,7 @@ const MainPage: NextPageWithLayout = () => {
   };
 
   const handlePoolClick = () => {
-    router.push('/pool');
+    router.push('/user-dashboard');
   };
 
   const handleSwapClick = () => {
@@ -116,12 +116,7 @@ const MainPage: NextPageWithLayout = () => {
                 >
                   🚀 Start Swapping
                 </Button>
-                <Button
-                  onClick={handlePoolClick}
-                  className="btn btn-secondary btn-lg px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                >
-                  💧 Manage Liquidity
-                </Button>
+
               </>
             ) : (
               <Button
@@ -133,35 +128,17 @@ const MainPage: NextPageWithLayout = () => {
             )}
           </div>
 
-          {/* Stats Section */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl w-full">
-            <div className="text-center">
-              <div className="text-2xl md:text-3xl font-bold text-primary-content">v3.0.0</div>
-              <div className="text-primary-content/70 text-sm">Program Version</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl md:text-3xl font-bold text-primary-content">✅</div>
-              <div className="text-primary-content/70 text-sm">Compiled</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl md:text-3xl font-bold text-primary-content">🔄</div>
-              <div className="text-primary-content/70 text-sm">Async Transitions</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl md:text-3xl font-bold text-primary-content">🛡️</div>
-              <div className="text-primary-content/70 text-sm">Safety Features</div>
-            </div>
-          </div>
+   
 
           {/* Quick Links */}
           <div className="mt-12 text-center">
             <p className="text-primary-content/80 mb-4">Ready to explore?</p>
             <div className="flex flex-wrap justify-center gap-4 text-sm">
               <a 
-                href="/pool" 
+                href="/user-dashboard" 
                 className="text-primary-content/70 hover:text-primary-content transition-colors duration-200 underline"
               >
-                Pool Management
+                Pool Management (Dashboard)
               </a>
               <span className="text-primary-content/50">•</span>
               <a 

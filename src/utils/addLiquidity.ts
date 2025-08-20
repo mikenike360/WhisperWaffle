@@ -1,179 +1,306 @@
 // addLiquidity.ts
-import { Transaction, WalletAdapterNetwork } from '@demox-labs/aleo-wallet-adapter-base';
-import { LeoWalletAdapter } from '@demox-labs/aleo-wallet-adapter-leo';
-import { CURRENT_NETWORK, PROGRAM_ID } from '@/types';
+import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
+import { CURRENT_NETWORK, PROGRAM_ID } from '../types';
 
-// Import the fee calculator function
-import { getFeeForFunction } from '@/utils/feeCalculator';
+// v9 functions
+const ADD_LIQUIDITY_FUNCTION = 'add_liquidity_public';
+const CREATE_POOL_FUNCTION = 'create_pool_public';
+const REMOVE_LIQUIDITY_FUNCTION = 'remove_liquidity';
 
-// New v3 program ID (update this after deploying)
-export const PROGRAM_ID_V3 = 'ww_swap_v3.aleo';
+// External programs
+const CREDITS_PROGRAM = 'credits.aleo';
+const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 
-export const ADD_LIQUIDITY_FUNCTION = 'add_liquidity';
-export const REMOVE_LIQUIDITY_FUNCTION = 'remove_liquidity';
-export const GET_USER_POSITION_FUNCTION = 'get_user_position';
-export const GET_POOL_STATE_FUNCTION = 'get_pool_state';
+// MVP custody address (holds pool assets)
+const CUSTODY_ADDRESS = 'aleo1xh0ncflwkfzga983lwujsha729c8nwu7phfn8aw7h3gahhj0ms8qytrxec';
+
+// Custom token id used in the program (keep in sync with Leo const TOKEN_ID)
+const CUSTOM_TOKEN_ID = '987654321987654321field';
+
+// Interface for pool data
+interface PoolData {
+  ra: number;
+  rb: number;
+  lastUpdated?: number;
+}
 
 /**
- * Adds liquidity to an existing swap pool using the v3 Leo program.
- *
- * @param wallet - The wallet adapter instance.
- * @param publicKey - The public key of the user adding liquidity.
- * @param aleoAmount - The amount of ALEO to add to the pool.
- * @param usdcAmount - The amount of USDC to add to the pool.
- * @param minLpTokens - Minimum LP tokens to receive (slippage protection).
- * @param setTxStatus - Function to update the transaction status in the UI.
- * @returns The transaction ID of the submitted liquidity addition.
+ * Add liquidity to the WhisperWaffle pool
+ * @param wallet - The user's wallet
+ * @param aleoAmount - Amount of ALEO to add (in microcredits)
+ * @param usdcAmount - Amount of custom token to add (in smallest units)
+ * @param minLpTokens - Minimum LP tokens to receive (slippage protection)
+ * @param currentPoolData - Current pool state data
+ * @returns Promise<boolean> - Success status
  */
 export async function addLiquidity(
-  wallet: LeoWalletAdapter,
-  publicKey: string,
+  wallet: any,
   aleoAmount: number,
   usdcAmount: number,
   minLpTokens: number,
-  setTxStatus: (status: string | null) => void,
-): Promise<string> {
-  setTxStatus('Preparing to add liquidity...');
-
+  currentPoolData?: PoolData
+): Promise<boolean> {
   try {
-    // Format the amounts for the Leo program
-    const aleoAmountForTransfer = `${aleoAmount}000000u64`; // Convert to microcredits
-    const usdcAmountForTransfer = `${usdcAmount}u128`;
+    if (!wallet?.adapter?.publicKey) {
+      throw new Error('Wallet not connected');
+    }
 
-    setTxStatus('Building add liquidity transaction...');
+    const publicKey = wallet.adapter.publicKey.toString();
+    
+    // Calculate fee (in micro credits)
+    const fee = 60000; // 0.06 ALEO for transaction fee
+    
+    console.log('Adding liquidity with parameters:', {
+      aleoAmount,
+      usdcAmount,
+      minLpTokens,
+      fee,
+      publicKey
+    });
 
-    // Get current pool state for the transaction
-    // Note: In a real implementation, you'd fetch this from the blockchain
-    const currentPoolState = {
-      ra: 1100, // This should come from real pool data
-      rb: 4547, // This should come from real pool data
+    // Helper to submit tx and wait for finalization
+    const sendAndWait = async (tx: any) => {
+      const id = await wallet.adapter.requestTransaction(tx);
+      if (!id) throw new Error('No transaction ID returned from wallet');
+      let status = await wallet.adapter.transactionStatus(id);
+      let attempts = 0;
+      while (status === 'Pending' && attempts < 60) {
+        await new Promise((r) => setTimeout(r, 1000));
+        status = await wallet.adapter.transactionStatus(id);
+        attempts++;
+      }
+      if (status !== 'Completed' && status !== 'Finalized') {
+        throw new Error(`Tx not completed: ${status}`);
+      }
+      return id;
     };
 
-    // 1. Create the transaction input
-    const addLiquidityInput = [
-      aleoAmountForTransfer,
-      usdcAmountForTransfer,
-      `${currentPoolState.ra}u128`,
-      `${currentPoolState.rb}u128`,
-      `${minLpTokens}u128`
-    ];
-
-    const fee = getFeeForFunction(ADD_LIQUIDITY_FUNCTION);
-    console.log('Calculated fee (in micro credits):', fee);
-
-    // 2. Build the transaction
-    const transTx = Transaction.createTransaction(
+    // 1) Transfer ALEO (u64) to custody
+    const creditsInputs = [CUSTODY_ADDRESS, `${BigInt(aleoAmount)}u64`];
+    const txCredits = Transaction.createTransaction(
       publicKey,
       CURRENT_NETWORK,
-      PROGRAM_ID_V3, // Use v3 program
-      ADD_LIQUIDITY_FUNCTION,
-      addLiquidityInput,
+      CREDITS_PROGRAM,
+      'transfer_public',
+      creditsInputs,
       fee,
-      true
+      false
     );
+    console.log('Submitting credits transfer:', creditsInputs);
+    await sendAndWait(txCredits);
 
-    // 3. Send the transaction
-    const txId = await wallet.requestTransaction(transTx);
-    setTxStatus(`Liquidity addition submitted: ${txId}`);
+    // 2) Transfer custom token (u128) to custody
+    const tokenInputs = [CUSTOM_TOKEN_ID, CUSTODY_ADDRESS, `${BigInt(usdcAmount)}u128`];
+    const txToken = Transaction.createTransaction(
+      publicKey,
+      CURRENT_NETWORK,
+      TOKEN_REGISTRY_PROGRAM,
+      'transfer_public',
+      tokenInputs,
+      fee,
+      false
+    );
+    console.log('Submitting token transfer:', tokenInputs);
+    await sendAndWait(txToken);
 
-    // 4. Poll for finalization
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const status = await wallet.transactionStatus(txId);
-      if (status === 'Finalized') {
-        finalized = true;
+    // Determine if pool exists: call our API (returns ra/rb)
+    let isNewPool = false;
+    try {
+      const r = await fetch('/api/pool');
+      const d = await r.json();
+      isNewPool = !(d && d.ok && typeof d.ra === 'number' && typeof d.rb === 'number' && (d.ra > 0 || d.rb > 0));
+    } catch (_) {
+      // If unable to fetch, default to add flow
+      isNewPool = false;
+    }
+
+    // 3) Warm-up: call test_connection once to mitigate SDK exposure lag
+    try {
+      const warmupTx = Transaction.createTransaction(
+        publicKey,
+        CURRENT_NETWORK,
+        PROGRAM_ID,
+        'test_connection',
+        [],
+        fee,
+        false
+      );
+      console.log('Submitting warm-up call (test_connection)');
+      await sendAndWait(warmupTx);
+    } catch (e) {
+      console.warn('Warm-up call failed, proceeding anyway:', e);
+    }
+
+    // 4) State update on our DEX program
+    const poolId = '1field';
+    const aleoU64 = `${BigInt(aleoAmount)}u64`;
+    const tokenU128 = `${BigInt(usdcAmount)}u128`;
+    const minLpU128 = `${BigInt(minLpTokens)}u128`;
+
+    const functionName = isNewPool ? CREATE_POOL_FUNCTION : ADD_LIQUIDITY_FUNCTION;
+    const stateInputs = isNewPool
+      ? [CUSTODY_ADDRESS, aleoU64, tokenU128, minLpU128]
+      : [poolId, CUSTODY_ADDRESS, aleoU64, tokenU128, minLpU128];
+
+    console.log(`Submitting DEX state update (${functionName}):`, stateInputs);
+
+    const attemptDex = async () => {
+      const txDex = Transaction.createTransaction(
+        publicKey,
+        CURRENT_NETWORK,
+        PROGRAM_ID,
+        functionName,
+        stateInputs,
+        fee,
+        false
+      );
+      return sendAndWait(txDex);
+    };
+
+    // Retry a few times to dodge transient "Invalid Aleo program: undefined"
+    const delays = [500, 1500, 3000];
+    let lastErr: any = null;
+    for (let i = 0; i < delays.length; i++) {
+      try {
+        await attemptDex();
+        lastErr = null;
+        break;
+      } catch (e: any) {
+        lastErr = e;
+        const msg = (e?.message || '').toString();
+        if (msg.includes('Invalid Aleo program')) {
+          console.warn(`DEX call attempt ${i + 1} failed with program exposure error, retrying after ${delays[i]}ms`);
+          await new Promise((r) => setTimeout(r, delays[i]));
+          // Re-run warmup once more before retry
+          try {
+            const warm2 = Transaction.createTransaction(
+              publicKey,
+              CURRENT_NETWORK,
+              PROGRAM_ID,
+              'test_connection',
+              [],
+              fee,
+              false
+            );
+            await sendAndWait(warm2);
+          } catch (_) {}
+          continue;
+        }
         break;
       }
-      await new Promise((res) => setTimeout(res, 2000));
     }
+    if (lastErr) throw lastErr;
 
-    if (!finalized) {
-      throw new Error('Liquidity addition not finalized in time.');
-    }
-
-    setTxStatus('Liquidity addition finalized successfully!');
-    return txId;
+    console.log('Liquidity added successfully!');
+    return true;
 
   } catch (error) {
     console.error('Error adding liquidity:', error);
-    throw new Error(`Failed to add liquidity: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to add liquidity: ${error instanceof Error ? error.message : 'An unknown error occurred. Please try again or report it'}`);
   }
 }
 
 /**
- * Removes liquidity from the pool using the v3 Leo program.
+ * Remove liquidity from the WhisperWaffle pool
+ * @param wallet - The user's wallet
+ * @param lpTokensToBurn - Number of LP tokens to burn
+ * @param minAleoOut - Minimum ALEO to receive (slippage protection)
+ * @param minUsdcOut - Minimum custom token to receive (slippage protection)
+ * @param currentPoolData - Current pool state data
+ * @returns Promise<boolean> - Success status
  */
 export async function removeLiquidity(
-  wallet: LeoWalletAdapter,
-  publicKey: string,
+  wallet: any,
   lpTokensToBurn: number,
   minAleoOut: number,
   minUsdcOut: number,
-  setTxStatus: (status: string | null) => void,
-): Promise<string> {
-  setTxStatus('Preparing to remove liquidity...');
-
+  currentPoolData?: PoolData
+): Promise<boolean> {
   try {
-    // Get current pool state for the transaction
-    const currentPoolState = {
-      ra: 1100, // This should come from real pool data
-      rb: 4547, // This should come from real pool data
-    };
+    if (!wallet?.adapter?.publicKey) {
+      throw new Error('Wallet not connected');
+    }
 
+    const publicKey = wallet.adapter.publicKey.toString();
+    
+    // Calculate fee (in micro credits)
+    const fee = 60000; // 0.06 ALEO for transaction fee
+    
+    console.log('Removing liquidity with parameters:', {
+      lpTokensToBurn,
+      minAleoOut,
+      minUsdcOut,
+      fee,
+      publicKey
+    });
+
+    // For v6, we need to specify the pool_id (using 1field for now)
+    const poolId = '1field';
+    
+    // Create the transaction inputs for remove_liquidity
+    // Function signature: remove_liquidity(pool_id: field, lp_tokens_to_burn: u128, min_token1_out: u128, min_token2_out: u128)
     const removeLiquidityInput = [
-      `${lpTokensToBurn}u128`,
-      `${currentPoolState.ra}u128`,
-      `${currentPoolState.rb}u128`,
-      `${minAleoOut}u128`,
-      `${minUsdcOut}u128`
+      poolId,                           // pool_id: field
+      `${lpTokensToBurn}u128`,          // lp_tokens_to_burn: u128
+      `${minAleoOut}u128`,              // min_token1_out: u128 (ALEO)
+      `${minUsdcOut}u128`               // min_token2_out: u128 (custom token)
     ];
 
-    const fee = getFeeForFunction(REMOVE_LIQUIDITY_FUNCTION);
-    console.log('Calculated fee (in micro credits):', fee);
+    console.log('Creating transaction with inputs:', removeLiquidityInput);
 
+    // Create the transaction
     const transTx = Transaction.createTransaction(
       publicKey,
       CURRENT_NETWORK,
-      PROGRAM_ID_V3,
+      PROGRAM_ID, // Use v6 program
       REMOVE_LIQUIDITY_FUNCTION,
       removeLiquidityInput,
       fee,
-      true
+      false // Fee is public
     );
 
-    const txId = await wallet.requestTransaction(transTx);
-    setTxStatus(`Liquidity removal submitted: ${txId}`);
+    console.log('Transaction created:', transTx);
 
-    // Poll for finalization
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const status = await wallet.transactionStatus(txId);
-      if (status === 'Finalized') {
-        finalized = true;
-        break;
-      }
-      await new Promise((res) => setTimeout(res, 2000));
+    // Request transaction execution
+    const txId = await wallet.adapter.requestTransaction(transTx);
+    
+    if (!txId) {
+      throw new Error('No transaction ID returned from wallet');
     }
 
-    if (!finalized) {
-      throw new Error('Liquidity removal not finalized in time.');
+    console.log('Transaction submitted with ID:', txId);
+
+    // Wait for transaction status
+    let status = await wallet.adapter.transactionStatus(txId);
+    let attempts = 0;
+    const maxAttempts = 30; // Wait up to 30 seconds
+
+    while (status === 'Pending' && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      status = await wallet.adapter.transactionStatus(txId);
+      attempts++;
+      console.log(`Transaction status (attempt ${attempts}):`, status);
     }
 
-    setTxStatus('Liquidity removal finalized successfully!');
-    return txId;
+    if (status === 'Finalized') {
+      console.log('Liquidity removed successfully!');
+      return true;
+    } else {
+      throw new Error(`Transaction failed with status: ${status}`);
+    }
 
   } catch (error) {
     console.error('Error removing liquidity:', error);
-    throw new Error(`Failed to remove liquidity: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to remove liquidity: ${error instanceof Error ? error.message : 'An unknown error occurred. Please try again or report it'}`);
   }
 }
 
 /**
  * Checks if the pool can accept new liquidity.
- * With v3, pools can always accept new liquidity.
+ * With v4, pools can always accept new liquidity.
  */
 export function canAddLiquidity(poolData: any): boolean {
-  // In v3, pools can always accept new liquidity
+      // In v4, pools can always accept new liquidity
   return true;
 }
 
@@ -204,7 +331,7 @@ export function calculateOptimalLiquidity(
 }
 
 /**
- * Fetches user's liquidity position from the v3 program.
+ * Fetches user's liquidity position from the v4 program.
  */
 export async function getUserPosition(publicKey: string): Promise<{
   aleoAmount: number;

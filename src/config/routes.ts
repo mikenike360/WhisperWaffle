@@ -1,9 +1,5 @@
 const routes = {
-  admin: '/admin',
-  settings: '/settings',
-  authorize: '/authorize',
-  board: '/boardPage',
-  postBounty: '/post-bounty',
+  token: '/token',
   dashBoard: '/user-dashboard',
 };
 

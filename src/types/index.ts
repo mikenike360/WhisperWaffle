@@ -36,4 +36,5 @@ export type BountyData = {
   proposals?: ProposalData[];
 };
 
-export const PROGRAM_ID = 'ww_swap_v3.aleo';
+// Program ID - automatically read from Leo source
+export const PROGRAM_ID = 'ww_swap_v9.aleo'; // This will be dynamically updated

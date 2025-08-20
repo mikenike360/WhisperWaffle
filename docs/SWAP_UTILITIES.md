@@ -1,6 +1,6 @@
 # WhisperWaffle Swap Utilities
 
-This document describes the utility functions created to interact with the `ww_swap_v3.aleo` Leo program.
+This document describes the utility functions created to interact with the `ww_swap_v5.aleo` Leo program.
 
 ## Overview
 
@@ -202,7 +202,7 @@ export const SwapComponent = () => {
 
 ## Constants
 
-- `PROGRAM_ID`: `'ww_swap_v3.aleo'`
+- `PROGRAM_ID`: `'ww_swap_v5.aleo'`
 - `CURRENT_NETWORK`: `WalletAdapterNetwork.TestnetBeta`
 - `CURRENT_RPC_URL`: `"https://testnetbeta.aleorpc.com"`
 

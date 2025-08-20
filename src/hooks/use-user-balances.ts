@@ -6,7 +6,6 @@ import { fetchAllBalances } from '../utils/balanceFetcher';
 interface UserBalances {
   ALEO: string;
   USDC: string;
-  ETH: string;
 }
 
 export const useUserBalances = () => {
@@ -14,7 +13,6 @@ export const useUserBalances = () => {
   const [balances, setBalances] = useState<UserBalances>({
     ALEO: '0',
     USDC: '0',
-    ETH: '0',
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +38,6 @@ export const useUserBalances = () => {
       const fallbackBalances: UserBalances = {
         ALEO: '1234.56789',
         USDC: '2500.00',
-        ETH: '5.4321',
       };
       setBalances(fallbackBalances);
     } finally {

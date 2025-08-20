@@ -19,54 +19,128 @@ import { getFeeForFunction } from '@/utils/feeCalculator';
  * @returns The transaction ID of the submitted pool initialization.
  */
 export async function initializePool(
-  wallet: LeoWalletAdapter,
+  wallet: any,
   publicKey: string,
   aleoAmount: number,
   usdcAmount: number,
   setTxStatus: (status: string | null) => void,
 ): Promise<string> {
-  // Format the amounts (e.g. if aleoAmount = 1000, then "1000000000u64")
-  const aleoAmountForTransfer = `${aleoAmount}000000u64`;
-  const usdcAmountForTransfer = `${usdcAmount}u128`;
-
-  setTxStatus('Initializing swap pool...');
-
-  // 1. Create the transaction input
-  const initializeInput = [aleoAmountForTransfer, usdcAmountForTransfer];
-
-  const fee = getFeeForFunction(INITIALIZE_POOL_FUNCTION);
-  console.log('Calculated fee (in micro credits):', fee);
-
-  // 2. Build the transaction
-  const transTx = Transaction.createTransaction(
-    publicKey,
-    CURRENT_NETWORK,
-    PROGRAM_ID,
-    INITIALIZE_POOL_FUNCTION,
-    initializeInput,
-    fee,
-    true
-  );
-
-  // 3. Send the transaction
-  const txId = await wallet.requestTransaction(transTx);
-  setTxStatus(`Pool initialization submitted: ${txId}`);
-
-  // 4. Poll for finalization
-  let finalized = false;
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const status = await wallet.transactionStatus(txId);
-    if (status === 'Finalized') {
-      finalized = true;
-      break;
+  setTxStatus('Preparing pool initialization...');
+  
+  try {
+    // Validate inputs
+    if (!wallet || !wallet.adapter) {
+      throw new Error('Invalid wallet: missing adapter');
     }
-    await new Promise((res) => setTimeout(res, 2000));
-  }
+    if (!publicKey || publicKey.trim() === '') {
+      throw new Error('Invalid public key');
+    }
+    if (!aleoAmount || aleoAmount <= 0) {
+      throw new Error('Invalid ALEO amount');
+    }
+    if (!usdcAmount || usdcAmount <= 0) {
+      throw new Error('Invalid custom token amount');
+    }
 
-  if (!finalized) {
-    throw new Error('Pool initialization not finalized in time.');
-  }
+    setTxStatus('Building pool initialization transaction...');
 
-  setTxStatus('Pool initialization finalized.');
-  return txId;
+    // 1. Create the transaction input - use proper Leo type format
+    const inputs = [
+      `${aleoAmount}000000u64`,  // ALEO amount in microcredits (u64 as expected by Leo)
+      `${usdcAmount}u128`        // Custom token amount (u128 as expected by Leo)
+    ];
+    console.log('Pool initialization inputs:', inputs);
+
+    const fee = getFeeForFunction(INITIALIZE_POOL_FUNCTION);
+    console.log('Calculated fee (in micro credits):', fee);
+    console.log('Fee type:', typeof fee);
+    console.log('Fee value:', fee);
+
+    setTxStatus('Creating transaction...');
+
+    // Debug: Log all parameters
+    console.log('Transaction parameters:', {
+      publicKey,
+      network: CURRENT_NETWORK,
+      programId: PROGRAM_ID,
+      function: INITIALIZE_POOL_FUNCTION,
+      inputs: inputs,
+      fee,
+      feePrivate: false
+    });
+    
+    // 2. Build the transaction - use the v5 program ID
+    const transaction = Transaction.createTransaction(
+      publicKey,
+      CURRENT_NETWORK,
+      'ww_swap_v5.aleo',
+      INITIALIZE_POOL_FUNCTION,
+      inputs,
+      fee,
+      false // Fee is public
+    );
+
+    console.log('Created transaction:', transaction);
+    
+    // Log raw transaction data for debugging
+    console.log('=== RAW TRANSACTION DEBUG ===');
+    console.log('Transaction object:', JSON.stringify(transaction, null, 2));
+    console.log('Transaction address:', transaction.address);
+    console.log('Transaction chainId:', transaction.chainId);
+    console.log('Transaction transitions:', transaction.transitions);
+    console.log('Transaction fee:', transaction.fee);
+    console.log('Transaction feePrivate:', transaction.feePrivate);
+    
+    // Log each transition in detail
+    if (transaction.transitions && transaction.transitions.length > 0) {
+      const transition = transaction.transitions[0];
+      console.log('=== TRANSITION DETAILS ===');
+      console.log('Transition program:', transition.program);
+      console.log('Transition functionName:', transition.functionName);
+      console.log('Transition inputs:', transition.inputs);
+      console.log('Transition tpk:', (transition as any).tpk);
+      console.log('Transition tcm:', (transition as any).tcm);
+    }
+    console.log('=== END TRANSACTION DEBUG ===');
+
+    setTxStatus('Requesting wallet signature...');
+
+    // 3. Send the transaction - use exact same pattern as token registration
+    const txId = await wallet.adapter.requestTransaction(transaction);
+    console.log('Transaction submitted with ID:', txId);
+    setTxStatus(`Pool initialization submitted: ${txId}`);
+
+    // 4. Poll for finalization
+    setTxStatus('Waiting for transaction finalization...');
+    let finalized = false;
+    
+    for (let attempt = 0; attempt < 60; attempt++) {
+      try {
+        const status = await wallet.adapter.transactionStatus(txId);
+        console.log(`Transaction status check ${attempt + 1}: ${status}`);
+        
+        if (status === 'Finalized') {
+          finalized = true;
+          break;
+        }
+        
+        await new Promise((res) => setTimeout(res, 2000));
+      } catch (error) {
+        console.log(`Status check attempt ${attempt + 1} failed:`, error);
+        // Continue polling even if status check fails
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+    }
+
+    if (!finalized) {
+      throw new Error('Pool initialization not finalized in time. Check the transaction ID manually.');
+    }
+
+    setTxStatus('Pool initialization finalized successfully!');
+    return txId;
+
+  } catch (error) {
+    console.error('Error initializing pool:', error);
+    throw new Error(`Failed to initialize pool: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }

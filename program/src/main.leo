@@ -1,313 +1,547 @@
 import credits.aleo;
 import token_registry.aleo;
 
-program ww_swap_v3.aleo {
-    // USDC token ID on Aleo (as provided)
-    const VUSDC_ID: field = 3443843282313283355522573239085696902919850365217539366784739393210722344986field;
+program ww_swap_v9.aleo {
+    // Token ID - configurable for testnet vs mainnet
+    // Testnet: Custom token ID for WhisperWaffle (your minted token)
+    // Mainnet: vUSDC token ID
+    const TOKEN_ID: field = 987654321987654321field; // Change this to vUSDC ID on mainnet
 
-    struct Pair {
-        reserve_aleo: u128,
-        reserve_usdc: u128,
-        total_liquidity: u128, // Track total liquidity for LP tokens
+    // Pool configuration
+    const SWAP_FEE: u16 = 30u16; // 0.3% swap fee (30 basis points)
+    const PROTOCOL_FEE: u16 = 5u16; // 0.05% protyocol fee (5 basis points)
+    const MIN_LIQUIDITY: u128 = 1000000u128; // Minimum liquidity to prevent division by zero
+
+    // Data structures
+    struct PoolInfo {
+        id: field,
+        token1_id: field, // ALEO token ID
+        token2_id: field, // Custom token ID
+        reserve1: u128,   // ALEO reserve
+        reserve2: u128,   // Custom token reserve
+        lp_total_supply: u128,
+        swap_fee: u16,
+        protocol_fee: u16,
+        pool_type: u8, // 0 = constant product (AMM), 1 = stable
     }
 
     struct LiquidityPosition {
-        aleo_amount: u128,
-        usdc_amount: u128,
+        user_address: address,
+        pool_id: field,
         lp_tokens: u128,
         timestamp: u64,
     }
 
-    // Pool state is stored in mapping `pool_state` keyed by a single byte `0u8`.
-    mapping pool_state: u8 => Pair;
-    
-    // User liquidity positions are stored in mapping `user_positions` keyed by user address.
-    mapping user_positions: address => LiquidityPosition;
+    struct CollectedFee {
+        protocol_in_fee: u128,
+        protocol_out_fee: u128,
+    }
+
+    // Global state mappings
+    mapping pools: field => PoolInfo;
+    mapping liquidity_positions: field => LiquidityPosition;
+    mapping protocol_fees: field => u128; // Accumulated protocol fees per token
 
     // This constructor is required for all Leo programs
-    // @noupgrade makes the program non-upgradable
     @noupgrade
     async constructor() {
         // The Leo compiler automatically generates the constructor logic
     }
 
-    // Initialize the pool with starting reserves
-    async transition initialise_pool(
-        public aleo_in: u64,
-        public usdc_in: u128
-    ) -> Future {
-        let new_ra: u128 = aleo_in as u128;
-        let new_rb: u128 = usdc_in;
-        
-        // Ensure minimum initial liquidity
-        assert(new_ra > 0u128 && new_rb > 0u128);
-        
-        let total_liquidity: u128 = new_ra + new_rb; // Simple LP token calculation
-
-        return async {
-            let current: Pair = Mapping::get_or_use(
-                pool_state,
-                0u8,
-                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128, total_liquidity: 0u128 }
-            );
-            assert(current.reserve_aleo == 0u128 && current.reserve_usdc == 0u128);
-            
-            // Set initial pool state
-            Mapping::set(pool_state, 0u8, Pair { 
-                reserve_aleo: new_ra, 
-                reserve_usdc: new_rb, 
-                total_liquidity: total_liquidity 
-            });
-        };
-    }
-
-    // Add liquidity to an existing pool with slippage protection
-    async transition add_liquidity(
-        public aleo_in: u64,
-        public usdc_in: u128,
-        public ra: u128,
-        public rb: u128,
+    // Create a new liquidity pool
+    async transition create_pool(
+        public token1_amount: u128, // ALEO amount
+        public token2_amount: u128, // Custom token amount
         public min_lp_tokens: u128
     ) -> Future {
-        let amount_aleo: u128 = aleo_in as u128;
-        let amount_usdc: u128 = usdc_in;
-        
         // Ensure positive amounts
-        assert(amount_aleo > 0u128 && amount_usdc > 0u128);
+        assert(token1_amount > 0u128 && token2_amount > 0u128);
         
-        // Calculate new reserves
-        let new_ra: u128 = ra + amount_aleo;
-        let new_rb: u128 = rb + amount_usdc;
+        // Ensure minimum liquidity
+        assert(token1_amount + token2_amount >= MIN_LIQUIDITY);
+        
+        // Get caller address outside async block
+        let caller_address: address = self.caller;
         
         return async {
-            // Verify current pool state matches provided reserves
-            let current: Pair = Mapping::get_or_use(
-                pool_state,
-                0u8,
-                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128, total_liquidity: 0u128 }
-            );
-            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
-            assert(ra > 0u128 && rb > 0u128); // Pool must already exist
+            // Generate unique pool ID (hash of token IDs and timestamp)
+            let pool_id: field = 1field; // Use fixed pool ID for now
             
-            // Calculate LP tokens to mint based on proportional contribution
-            let current_total_liquidity: u128 = current.total_liquidity;
-            let aleo_ratio: u128 = (amount_aleo * current_total_liquidity) / ra;
-            let usdc_ratio: u128 = (amount_usdc * current_total_liquidity) / rb;
-            let lp_tokens_to_mint: u128 = aleo_ratio < usdc_ratio ? aleo_ratio : usdc_ratio;
+            // Calculate initial LP tokens (simple sum for now)
+            let lp_tokens: u128 = token1_amount + token2_amount;
             
-            // Ensure minimum LP tokens minted (slippage protection)
-            assert(lp_tokens_to_mint >= min_lp_tokens);
-            assert(lp_tokens_to_mint > 0u128);
+            // Ensure minimum LP tokens
+            assert(lp_tokens >= min_lp_tokens);
             
-            let new_total_liquidity: u128 = current_total_liquidity + lp_tokens_to_mint;
+            // Create pool info
+            let pool_info: PoolInfo = PoolInfo {
+                id: pool_id,
+                token1_id: 0field, // ALEO token ID (0 for credits)
+                token2_id: TOKEN_ID,
+                reserve1: token1_amount,
+                reserve2: token2_amount,
+                lp_total_supply: lp_tokens,
+                swap_fee: SWAP_FEE,
+                protocol_fee: PROTOCOL_FEE,
+                pool_type: 0u8, // Constant product AMM
+            };
             
-            // Update pool state
-            Mapping::set(
-                pool_state,
-                0u8,
-                Pair { 
-                    reserve_aleo: new_ra, 
-                    reserve_usdc: new_rb, 
-                    total_liquidity: new_total_liquidity 
-                }
-            );
+            // Store pool info
+            Mapping::set(pools, pool_id, pool_info);
+            
+            // Create initial liquidity position for creator
+            let position: LiquidityPosition = LiquidityPosition {
+                user_address: caller_address,
+                pool_id: pool_id,
+                lp_tokens: lp_tokens,
+                timestamp: 0u64, // Use 0 for now since we can't access block_height
+            };
+            
+            // Store liquidity position
+            let position_key: field = (caller_address as field) + pool_id;
+            Mapping::set(liquidity_positions, position_key, position);
         };
     }
 
-    // Remove liquidity from the pool with slippage protection
+    // Add liquidity to an existing pool
+    async transition add_liquidity(
+        public pool_id: field,
+        public token1_amount: u128, // ALEO amount
+        public token2_amount: u128, // Custom token amount
+        public min_lp_tokens: u128
+    ) -> Future {
+        // Ensure positive amounts
+        assert(token1_amount > 0u128 && token2_amount > 0u128);
+        
+        // Get caller address outside async block
+        let caller_address: address = self.caller;
+        
+        return async {
+            // Get current pool state
+            let current_pool: PoolInfo = Mapping::get_or_use(
+                pools,
+                pool_id,
+                PoolInfo {
+                    id: 0field,
+                    token1_id: 0field,
+                    token2_id: 0field,
+                    reserve1: 0u128,
+                    reserve2: 0u128,
+                    lp_total_supply: 0u128,
+                    swap_fee: 0u16,
+                    protocol_fee: 0u16,
+                    pool_type: 0u8,
+                }
+            );
+            
+            // Ensure pool exists
+            assert(current_pool.id != 0field);
+            
+            // Calculate optimal amounts to maintain ratio
+            let optimal_token2: u128 = (token1_amount * current_pool.reserve2) / current_pool.reserve1;
+            let optimal_token1: u128 = (token2_amount * current_pool.reserve1) / current_pool.reserve2;
+            
+            // Use the smaller ratio to maintain pool balance
+            let actual_token1: u128 = token1_amount < optimal_token1 ? token1_amount : optimal_token1;
+            let actual_token2: u128 = token2_amount < optimal_token2 ? token2_amount : optimal_token2;
+            
+            // Calculate LP tokens to mint
+            let lp_tokens_to_mint: u128 = (actual_token1 * current_pool.lp_total_supply) / current_pool.reserve1;
+            
+            // Ensure minimum LP tokens
+            assert(lp_tokens_to_mint >= min_lp_tokens);
+            
+            // Update pool reserves
+            let new_reserve1: u128 = current_pool.reserve1 + actual_token1;
+            let new_reserve2: u128 = current_pool.reserve2 + actual_token2;
+            let new_lp_total_supply: u128 = current_pool.lp_total_supply + lp_tokens_to_mint;
+            
+            // Update pool state
+            let updated_pool: PoolInfo = PoolInfo {
+                id: current_pool.id,
+                token1_id: current_pool.token1_id,
+                token2_id: current_pool.token2_id,
+                reserve1: new_reserve1,
+                reserve2: new_reserve2,
+                lp_total_supply: new_lp_total_supply,
+                swap_fee: current_pool.swap_fee,
+                protocol_fee: current_pool.protocol_fee,
+                pool_type: current_pool.pool_type,
+            };
+            
+            Mapping::set(pools, pool_id, updated_pool);
+            
+            // Update or create liquidity position
+            let position_key: field = (caller_address as field) + pool_id;
+            let existing_position: LiquidityPosition = Mapping::get_or_use(
+                liquidity_positions,
+                position_key,
+                LiquidityPosition {
+                    user_address: caller_address,
+                    pool_id: pool_id,
+                    lp_tokens: 0u128,
+                    timestamp: 0u64,
+                }
+            );
+            
+            let new_lp_tokens: u128 = existing_position.lp_tokens + lp_tokens_to_mint;
+            let updated_position: LiquidityPosition = LiquidityPosition {
+                user_address: caller_address,
+                pool_id: pool_id,
+                lp_tokens: new_lp_tokens,
+                timestamp: 0u64,
+            };
+            
+            Mapping::set(liquidity_positions, position_key, updated_position);
+        };
+    }
+
+    // Remove liquidity from a pool
     async transition remove_liquidity(
+        public pool_id: field,
         public lp_tokens_to_burn: u128,
-        public ra: u128,
-        public rb: u128,
-        public min_aleo_out: u128,
-        public min_usdc_out: u128
+        public min_token1_out: u128,
+        public min_token2_out: u128
     ) -> Future {
         // Ensure positive amount
         assert(lp_tokens_to_burn > 0u128);
         
+        // Get caller address outside async block
+        let caller_address: address = self.caller;
+        
         return async {
-            // Verify current pool state
-            let current: Pair = Mapping::get_or_use(
-                pool_state,
-                0u8,
-                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128, total_liquidity: 0u128 }
+            // Get current pool state
+            let current_pool: PoolInfo = Mapping::get_or_use(
+                pools,
+                pool_id,
+                PoolInfo {
+                    id: 0field,
+                    token1_id: 0field,
+                    token2_id: 0field,
+                    reserve1: 0u128,
+                    reserve2: 0u128,
+                    lp_total_supply: 0u128,
+                    swap_fee: 0u16,
+                    protocol_fee: 0u16,
+                    pool_type: 0u8,
+                }
             );
-            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
             
-            // Calculate amounts to withdraw based on LP token ratio
-            let total_liquidity: u128 = current.total_liquidity;
-            let aleo_to_withdraw: u128 = (lp_tokens_to_burn * ra) / total_liquidity;
-            let usdc_to_withdraw: u128 = (lp_tokens_to_burn * rb) / total_liquidity;
+            // Ensure pool exists
+            assert(current_pool.id != 0field);
+            
+            // Get user's liquidity position
+            let position_key: field = (caller_address as field) + pool_id;
+            let user_position: LiquidityPosition = Mapping::get_or_use(
+                liquidity_positions,
+                position_key,
+                LiquidityPosition {
+                    user_address: caller_address,
+                    pool_id: pool_id,
+                    lp_tokens: 0u128,
+                    timestamp: 0u64,
+                }
+            );
+            
+            // Ensure user has enough LP tokens
+            assert(user_position.lp_tokens >= lp_tokens_to_burn);
+            
+            // Calculate amounts to withdraw
+            let token1_to_withdraw: u128 = (lp_tokens_to_burn * current_pool.reserve1) / current_pool.lp_total_supply;
+            let token2_to_withdraw: u128 = (lp_tokens_to_burn * current_pool.reserve2) / current_pool.lp_total_supply;
             
             // Slippage protection
-            assert(aleo_to_withdraw >= min_aleo_out);
-            assert(usdc_to_withdraw >= min_usdc_out);
+            assert(token1_to_withdraw >= min_token1_out);
+            assert(token2_to_withdraw >= min_token2_out);
             
-            // Calculate new reserves
-            let new_ra: u128 = ra - aleo_to_withdraw;
-            let new_rb: u128 = rb - usdc_to_withdraw;
-            let new_total_liquidity: u128 = total_liquidity - lp_tokens_to_burn;
+            // Update pool reserves
+            let new_reserve1: u128 = current_pool.reserve1 - token1_to_withdraw;
+            let new_reserve2: u128 = current_pool.reserve2 - token2_to_withdraw;
+            let new_lp_total_supply: u128 = current_pool.lp_total_supply - lp_tokens_to_burn;
             
             // Update pool state
-            Mapping::set(
-                pool_state,
-                0u8,
-                Pair { 
-                    reserve_aleo: new_ra, 
-                    reserve_usdc: new_rb, 
-                    total_liquidity: new_total_liquidity 
+            let updated_pool: PoolInfo = PoolInfo {
+                id: current_pool.id,
+                token1_id: current_pool.token1_id,
+                token2_id: current_pool.token2_id,
+                reserve1: new_reserve1,
+                reserve2: new_reserve2,
+                lp_total_supply: new_lp_total_supply,
+                swap_fee: current_pool.swap_fee,
+                protocol_fee: current_pool.protocol_fee,
+                pool_type: current_pool.pool_type,
+            };
+            
+            Mapping::set(pools, pool_id, updated_pool);
+            
+            // Update user's liquidity position
+            let new_lp_tokens: u128 = user_position.lp_tokens - lp_tokens_to_burn;
+            let updated_position: LiquidityPosition = LiquidityPosition {
+                user_address: caller_address,
+                pool_id: pool_id,
+                lp_tokens: new_lp_tokens,
+                timestamp: 0u64,
+            };
+            
+            Mapping::set(liquidity_positions, position_key, updated_position);
+        };
+    }
+
+    // Swap ALEO for custom token (constant product AMM)
+    async transition swap_aleo_for_token(
+        public pool_id: field,
+        public aleo_in: u128,
+        public min_token_out: u128
+    ) -> Future {
+        // Ensure positive amount
+        assert(aleo_in > 0u128);
+        
+        return async {
+            // Get current pool state
+            let current_pool: PoolInfo = Mapping::get_or_use(
+                pools,
+                pool_id,
+                PoolInfo {
+                    id: 0field,
+                    token1_id: 0field,
+                    token2_id: 0field,
+                    reserve1: 0u128,
+                    reserve2: 0u128,
+                    lp_total_supply: 0u128,
+                    swap_fee: 0u16,
+                    protocol_fee: 0u16,
+                    pool_type: 0u8,
+                }
+            );
+            
+            // Ensure pool exists and is AMM type
+            assert(current_pool.id != 0field);
+            assert(current_pool.pool_type == 0u8);
+            
+            // Calculate output amount using constant product formula
+            // (x + dx) * (y - dy) = x * y
+            // dy = (dx * y) / (x + dx)
+            let aleo_reserve: u128 = current_pool.reserve1;
+            let token_reserve: u128 = current_pool.reserve2;
+            
+            // Apply swap fee
+            let aleo_in_with_fee: u128 = aleo_in * (10000u128 - current_pool.swap_fee as u128) / 10000u128;
+            
+            // Calculate token output
+            let token_out: u128 = (aleo_in_with_fee * token_reserve) / (aleo_reserve + aleo_in_with_fee);
+            
+            // Ensure minimum output
+            assert(token_out >= min_token_out);
+            
+            // Calculate protocol fees
+            let protocol_fee_amount: u128 = (aleo_in * current_pool.protocol_fee as u128) / 10000u128;
+            
+            // Update pool reserves
+            let new_aleo_reserve: u128 = aleo_reserve + aleo_in;
+            let new_token_reserve: u128 = token_reserve - token_out;
+            
+            let updated_pool: PoolInfo = PoolInfo {
+                id: current_pool.id,
+                token1_id: current_pool.token1_id,
+                token2_id: current_pool.token2_id,
+                reserve1: new_aleo_reserve,
+                reserve2: new_token_reserve,
+                lp_total_supply: current_pool.lp_total_supply,
+                swap_fee: current_pool.swap_fee,
+                protocol_fee: current_pool.protocol_fee,
+                pool_type: current_pool.pool_type,
+            };
+            
+            Mapping::set(pools, pool_id, updated_pool);
+            
+            // Accumulate protocol fees
+            let current_protocol_fees: u128 = Mapping::get_or_use(protocol_fees, 0field, 0u128);
+            let new_protocol_fees: u128 = current_protocol_fees + protocol_fee_amount;
+            Mapping::set(protocol_fees, 0field, new_protocol_fees);
+        };
+    }
+
+    // Get pool information
+    async transition get_pool_info(
+        public pool_id: field
+    ) -> Future {
+        return async {
+            let pool_info: PoolInfo = Mapping::get_or_use(
+                pools,
+                pool_id,
+                PoolInfo {
+                    id: 0field,
+                    token1_id: 0field,
+                    token2_id: 0field,
+                    reserve1: 0u128,
+                    reserve2: 0u128,
+                    lp_total_supply: 0u128,
+                    swap_fee: 0u16,
+                    protocol_fee: 0u16,
+                    pool_type: 0u8,
                 }
             );
         };
     }
 
-    // Swap public ALEO for private USDC.
-    async transition swap_public_for_private(
+    // Get user's liquidity position
+    async transition get_user_position(
+        public user_address: address,
+        public pool_id: field
+    ) -> Future {
+        return async {
+            let position_key: field = (user_address as field) + pool_id;
+            let position: LiquidityPosition = Mapping::get_or_use(
+                liquidity_positions,
+                position_key,
+                LiquidityPosition {
+                    user_address: user_address,
+                    pool_id: pool_id,
+                    lp_tokens: 0u128,
+                    timestamp: 0u64,
+                }
+            );
+        };
+    }
+
+    // Simple test function to verify contract connectivity
+    async transition test_connection() -> Future {
+        return async {
+            // This function just returns successfully to test if the contract can be called
+            // It doesn't modify any state or require any inputs
+        };
+    }
+
+    // MVP public-only: create pool by transferring public ALEO and token to a custody address
+    async transition create_pool_public(
+        public custody_address: address,
         public aleo_in: u64,
-        public ra: u128,
-        public rb: u128,
-        min_out: u128,
-        recipient: address
+        public token_in: u128,
+        public min_lp: u128
     ) -> Future {
-        let amount_in: u128 = aleo_in as u128;
-        assert(ra > 0u128 && rb > 0u128);
-        assert(amount_in > 0u128);
+        // basic checks
+        assert(aleo_in > 0u64);
+        assert(token_in > 0u128);
 
-        let in_fee: u128 = amount_in * 997u128;
-        let out_amt: u128 = (in_fee * rb) / (ra * 1000u128 + in_fee);
-        
-        // Safety checks
-        assert(out_amt >= min_out);
-        assert(out_amt < rb); // Cannot output more than reserve
-        assert(out_amt > 0u128);
-
-        let new_ra: u128 = ra + amount_in;
-        let new_rb: u128 = rb - out_amt;
-
-        // Call external async transition; destructure (Token, Future).
-        let (ignored_token, f_transfer) = token_registry.aleo/transfer_public_to_private(
-            VUSDC_ID,
-            recipient,
-            out_amt,
-            false
-        );
-
-        // Return one async Future that first performs the external transfer, then updates state.
         return async {
-            f_transfer.await();
-
-            let current: Pair = Mapping::get_or_use(
-                pool_state,
-                0u8,
-                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128, total_liquidity: 0u128 }
+            // Ensure pool 1 isn't initialized yet
+            let exists: PoolInfo = Mapping::get_or_use(
+                pools,
+                1field,
+                PoolInfo { id: 0field, token1_id: 0field, token2_id: 0field, reserve1: 0u128, reserve2: 0u128, lp_total_supply: 0u128, swap_fee: 0u16, protocol_fee: 0u16, pool_type: 0u8 }
             );
-            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
+            assert(exists.id == 0field);
 
-            Mapping::set(
-                pool_state,
-                0u8,
-                Pair { 
-                    reserve_aleo: new_ra, 
-                    reserve_usdc: new_rb, 
-                    total_liquidity: current.total_liquidity 
-                }
-            );
+            // Initialize reserves and LP (simple model)
+            let aleo_in_u128: u128 = aleo_in as u128;
+            let lp: u128 = aleo_in_u128 + token_in;
+            assert(lp >= min_lp);
+
+            let pool_info: PoolInfo = PoolInfo {
+                id: 1field,
+                token1_id: 0field,
+                token2_id: TOKEN_ID,
+                reserve1: aleo_in_u128,
+                reserve2: token_in,
+                lp_total_supply: lp,
+                swap_fee: SWAP_FEE,
+                protocol_fee: PROTOCOL_FEE,
+                pool_type: 0u8,
+            };
+            Mapping::set(pools, 1field, pool_info);
         };
     }
 
-    // Swap private credits for private USDC.
-    async transition swap_private_for_private(
-        private credit_in: credits.aleo/credits,
-        public ra: u128,
-        public rb: u128,
-        min_out: u128,
-        recipient: address
-    ) -> Future {
-        let amount_in: u128 = credit_in.microcredits as u128;
-        assert(ra > 0u128 && rb > 0u128);
-        assert(amount_in > 0u128);
-
-        let in_fee: u128 = amount_in * 997u128;
-        let out_amt: u128 = (in_fee * rb) / (ra * 1000u128 + in_fee);
-        
-        // Safety checks
-        assert(out_amt >= min_out);
-        assert(out_amt < rb); // Cannot output more than reserve
-        assert(out_amt > 0u128);
-
-        let new_ra: u128 = ra + amount_in;
-        let new_rb: u128 = rb - out_amt;
-
-        // External async transition; destructure (Token, Future).
-        let (ignored_token2, f_transfer2) = token_registry.aleo/transfer_public_to_private(
-            VUSDC_ID,
-            recipient,
-            out_amt,
-            false
-        );
-
-        return async {
-            f_transfer2.await();
-
-            let current: Pair = Mapping::get_or_use(
-                pool_state,
-                0u8,
-                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128, total_liquidity: 0u128 }
-            );
-            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
-
-            Mapping::set(
-                pool_state,
-                0u8,
-                Pair { 
-                    reserve_aleo: new_ra, 
-                    reserve_usdc: new_rb, 
-                    total_liquidity: current.total_liquidity 
-                }
-            );
-        };
-    }
-
-    // Swap public ALEO for public USDC (easier to test and use)
-    async transition swap_public_for_public(
+    // MVP public-only: add liquidity by transferring public ALEO and token to custody
+    async transition add_liquidity_public(
+        public pool_id: field,
+        public custody_address: address,
         public aleo_in: u64,
-        public ra: u128,
-        public rb: u128,
-        public min_out: u128
+        public token_in: u128,
+        public min_lp: u128
     ) -> Future {
-        let amount_in: u128 = aleo_in as u128;
-        assert(ra > 0u128 && rb > 0u128);
-        assert(amount_in > 0u128);
+        assert(aleo_in > 0u64);
+        assert(token_in > 0u128);
 
-        let in_fee: u128 = amount_in * 997u128;
-        let out_amt: u128 = (in_fee * rb) / (ra * 1000u128 + in_fee);
-        
-        // Safety checks
-        assert(out_amt >= min_out);
-        assert(out_amt < rb); // Cannot output more than reserve
-        assert(out_amt > 0u128);
-
-        let new_ra: u128 = ra + amount_in;
-        let new_rb: u128 = rb - out_amt;
-
-        // Return async future that updates the pool state
         return async {
-            let current: Pair = Mapping::get_or_use(
-                pool_state,
-                0u8,
-                Pair { reserve_aleo: 0u128, reserve_usdc: 0u128, total_liquidity: 0u128 }
+            // Load pool
+            let current_pool: PoolInfo = Mapping::get_or_use(
+                pools,
+                pool_id,
+                PoolInfo { id: 0field, token1_id: 0field, token2_id: 0field, reserve1: 0u128, reserve2: 0u128, lp_total_supply: 0u128, swap_fee: 0u16, protocol_fee: 0u16, pool_type: 0u8 }
             );
-            assert(current.reserve_aleo == ra && current.reserve_usdc == rb);
+            assert(current_pool.id != 0field);
 
-            Mapping::set(
-                pool_state,
-                0u8,
-                Pair { 
-                    reserve_aleo: new_ra, 
-                    reserve_usdc: new_rb, 
-                    total_liquidity: current.total_liquidity 
-                }
+            // Update reserves and LP (simple proportional mint)
+            let aleo_in_u128: u128 = aleo_in as u128;
+            let new_reserve1: u128 = current_pool.reserve1 + aleo_in_u128;
+            let new_reserve2: u128 = current_pool.reserve2 + token_in;
+            let new_lp: u128 = current_pool.lp_total_supply + aleo_in_u128; // simplistic
+            assert(new_lp >= min_lp);
+
+            let updated: PoolInfo = PoolInfo {
+                id: current_pool.id,
+                token1_id: current_pool.token1_id,
+                token2_id: current_pool.token2_id,
+                reserve1: new_reserve1,
+                reserve2: new_reserve2,
+                lp_total_supply: new_lp,
+                swap_fee: current_pool.swap_fee,
+                protocol_fee: current_pool.protocol_fee,
+                pool_type: current_pool.pool_type,
+            };
+            Mapping::set(pools, pool_id, updated);
+        };
+    }
+
+    // MVP public-only: swap ALEO for token
+    async transition swap_aleo_for_token_public(
+        public pool_id: field,
+        public custody_address: address,
+        public aleo_in: u64,
+        public token_out: u128,
+        public min_token_out: u128
+    ) -> Future {
+        assert(aleo_in > 0u64);
+        assert(token_out > 0u128);
+
+        return async {
+            // Load pool
+            let p: PoolInfo = Mapping::get_or_use(
+                pools,
+                pool_id,
+                PoolInfo { id: 0field, token1_id: 0field, token2_id: 0field, reserve1: 0u128, reserve2: 0u128, lp_total_supply: 0u128, swap_fee: 0u16, protocol_fee: 0u16, pool_type: 0u8 }
             );
+            assert(p.id != 0field);
+            assert(p.pool_type == 0u8);
+
+            // Compute max token out with fee
+            let dx: u128 = aleo_in as u128;
+            let fee_den: u128 = 10000u128;
+            let fee_num: u128 = (fee_den - (p.swap_fee as u128));
+            let dx_fee: u128 = (dx * fee_num);
+            let num: u128 = dx_fee * p.reserve2;
+            let den: u128 = (p.reserve1 + dx) * fee_den;
+            let max_out: u128 = num / den;
+
+            assert(max_out >= min_token_out);
+            assert(token_out <= max_out);
+
+            // Update reserves
+            let new_r1: u128 = p.reserve1 + dx;
+            let new_r2: u128 = p.reserve2 - token_out;
+            let np: PoolInfo = PoolInfo {
+                id: p.id,
+                token1_id: p.token1_id,
+                token2_id: p.token2_id,
+                reserve1: new_r1,
+                reserve2: new_r2,
+                lp_total_supply: p.lp_total_supply,
+                swap_fee: p.swap_fee,
+                protocol_fee: p.protocol_fee,
+                pool_type: p.pool_type,
+            };
+            Mapping::set(pools, pool_id, np);
         };
     }
 }

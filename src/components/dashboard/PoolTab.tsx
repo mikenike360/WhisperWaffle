@@ -36,8 +36,8 @@ const PoolTab: React.FC = () => {
             </div>
             <div className="p-4 bg-white rounded-lg border">
               <div className="text-2xl font-bold text-blue-600 mb-2">{(poolData.rb / 1000000).toFixed(6)}</div>
-              <div className="text-sm text-gray-600">USDC Reserve</div>
-              <div className="text-xs text-blue-600 mt-1">🔵 Live Data</div>
+              <div className="text-sm text-gray-600">Custom Token Reserve</div>
+              <div className="text-xs text-blue-600 mt-1">🔵 Test Mode</div>
             </div>
           </div>
         ) : (

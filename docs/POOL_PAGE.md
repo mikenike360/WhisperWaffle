@@ -2,7 +2,7 @@
 
 ## Overview
 
-The pool page (`/pool`) allows users to view pool statistics and add liquidity to the ALEO/USDC swap pool. This page integrates with your deployed `ww_swap_v3.aleo` Leo program.
+The pool page (`/pool`) allows users to view pool statistics and add liquidity to the ALEO/USDC swap pool. This page integrates with your deployed `ww_swap_v5.aleo` Leo program.
 
 ## Features
 
