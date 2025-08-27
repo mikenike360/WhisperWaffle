@@ -10,16 +10,35 @@ import { getFeeForFunction } from '@/utils/feeCalculator';
 
 export interface TokenRegistrationData {
   tokenId: string;
-  totalSupply: string;
-  circulatingSupply: string;
+  name: string;
+  symbol: string;
   decimals: string;
   maxSupply: string;
-  isMintable: boolean;
-  owner: string;
+  externalAuthorizationRequired: boolean;
+  externalAuthorizationParty: string; // Address of the external authorization party
 }
 
 export const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 export const REGISTER_TOKEN_FUNCTION = 'register_token';
+
+/**
+ * Converts ASCII text to u128 representation as required by Aleo programs.
+ * This converts each character to its ASCII value and combines them into a single u128.
+ * 
+ * @param text - The text to convert
+ * @returns The u128 representation as a string
+ */
+function convertTextToU128(text: string): string {
+  if (!text || text.length === 0) return '0';
+  
+  let result = BigInt(0);
+  for (let i = 0; i < text.length; i++) {
+    const charCode = BigInt(text.charCodeAt(i));
+    result = result * BigInt(256) + charCode;
+  }
+  
+  return result.toString();
+}
 
 /**
  * Registers a new token on the Aleo blockchain using the token_registry.aleo program.
@@ -41,24 +60,32 @@ export async function registerToken(
 
   try {
     // Validate required fields
-    if (!tokenData.tokenId || !tokenData.owner) {
-      throw new Error('Token ID and owner address are required');
+    if (!tokenData.tokenId || !tokenData.name || !tokenData.symbol || !tokenData.externalAuthorizationParty) {
+      throw new Error('Token ID, name, symbol, and external authorization party are required');
     }
 
     setTxStatus('Building token registration transaction...');
 
     // Prepare the inputs array for the Leo program
+    // register_token(token_id, name, symbol, decimals, max_supply, external_authorization_required, external_authorization_party)
+    
+    // Convert name and symbol to u128 (ASCII text represented in bits)
+    const nameAsU128 = convertTextToU128(tokenData.name);
+    const symbolAsU128 = convertTextToU128(tokenData.symbol);
+    
     const inputs = [
-      tokenData.tokenId,
-      `${tokenData.totalSupply}u128`,
-      `${tokenData.circulatingSupply}u128`,
-      `${tokenData.decimals}u8`,
-      `${tokenData.maxSupply}u128`,
-      tokenData.isMintable.toString(),
-      tokenData.owner
+      tokenData.tokenId, // token_id: field
+      `${nameAsU128}u128`, // name: u128 (ASCII text represented in bits)
+      `${symbolAsU128}u128`, // symbol: u128 (ASCII text represented in bits)
+      `${tokenData.decimals}u8`, // decimals: u8
+      `${tokenData.maxSupply}u128`, // max_supply: u128
+      tokenData.externalAuthorizationRequired.toString(), // external_authorization_required: bool
+      tokenData.externalAuthorizationParty // external_authorization_party: address
     ];
 
     console.log('Token registration inputs:', inputs);
+    console.log('Input types:', inputs.map(input => typeof input));
+    console.log('External auth party address:', tokenData.externalAuthorizationParty);
 
     // Calculate the fee for this transaction
     const fee = getFeeForFunction(REGISTER_TOKEN_FUNCTION);
@@ -137,12 +164,12 @@ export function validateTokenData(tokenData: TokenRegistrationData): string[] {
     errors.push('Token ID is required');
   }
 
-  if (!tokenData.owner || tokenData.owner.trim() === '') {
-    errors.push('Owner address is required');
+  if (!tokenData.name || tokenData.name.trim() === '') {
+    errors.push('Token name is required');
   }
 
-  if (!tokenData.owner.startsWith('aleo1')) {
-    errors.push('Owner address must be a valid Aleo address (starting with aleo1)');
+  if (!tokenData.symbol || tokenData.symbol.trim() === '') {
+    errors.push('Token symbol is required');
   }
 
   const decimals = parseInt(tokenData.decimals);
@@ -150,19 +177,17 @@ export function validateTokenData(tokenData: TokenRegistrationData): string[] {
     errors.push('Decimals must be between 0 and 18');
   }
 
-  const totalSupply = BigInt(tokenData.totalSupply);
-  if (totalSupply <= 0) {
-    errors.push('Total supply must be greater than 0');
-  }
-
-  const circulatingSupply = BigInt(tokenData.circulatingSupply);
-  if (circulatingSupply < 0 || circulatingSupply > totalSupply) {
-    errors.push('Circulating supply must be between 0 and total supply');
-  }
-
   const maxSupply = BigInt(tokenData.maxSupply);
-  if (maxSupply < totalSupply) {
-    errors.push('Max supply must be greater than or equal to total supply');
+  if (maxSupply <= 0) {
+    errors.push('Max supply must be greater than 0');
+  }
+
+  if (!tokenData.externalAuthorizationParty || tokenData.externalAuthorizationParty.trim() === '') {
+    errors.push('External authorization party address is required');
+  }
+
+  if (!tokenData.externalAuthorizationParty.startsWith('aleo1')) {
+    errors.push('External authorization party must be a valid Aleo address (starting with aleo1)');
   }
 
   return errors;
@@ -177,11 +202,9 @@ export function validateTokenData(tokenData: TokenRegistrationData): string[] {
 export function formatTokenDataForDisplay(tokenData: TokenRegistrationData) {
   return {
     ...tokenData,
-    totalSupplyFormatted: formatLargeNumber(tokenData.totalSupply),
-    circulatingSupplyFormatted: formatLargeNumber(tokenData.circulatingSupply),
     maxSupplyFormatted: formatLargeNumber(tokenData.maxSupply),
     decimalsFormatted: `${tokenData.decimals} decimal places`,
-    mintableStatus: tokenData.isMintable ? 'Mintable' : 'Fixed Supply'
+    authStatus: tokenData.externalAuthorizationRequired ? 'External Auth Required' : 'No External Auth'
   };
 }
 

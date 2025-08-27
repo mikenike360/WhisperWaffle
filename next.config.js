@@ -26,7 +26,8 @@ module.exports = withPWA({
       ignoreDuringBuilds: true,
     },
   }),
-  webpack5: true,
+  // Next.js 13+ has better WASM support built-in
+  // webpack5: true, // No longer needed in Next.js 13+
   webpack: (config, options) => {
     config.ignoreWarnings = [/Failed to parse source map/];
     const fallback = config.resolve.fallback || {};
@@ -57,13 +58,18 @@ module.exports = withPWA({
     // Handle nextjs bug with wasm static files
     patchWasmModuleImport(config, options.isServer);
 
-    // In next.config.js, inside your webpack function:
-  config.module.rules.push({
-    test: /\.wasm$/,
-    include: /node_modules[\\/]@demox-labs[\\/]aleo-sdk-web/,
-    type: 'javascript/auto',
-    loader: 'file-loader',
-  });
+    // Next.js 13+ has better WASM support - use the built-in WASM handling
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+      syncWebAssembly: true,
+    };
+    
+    // Handle WASM files with modern webpack approach
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'webassembly/async',
+    });
 
 
     return config;
@@ -71,18 +77,10 @@ module.exports = withPWA({
 });
 
 function patchWasmModuleImport(config, isServer) {
-  config.experiments = Object.assign(config.experiments || {}, {
-      asyncWebAssembly: true,
-  });
-
+  // Next.js 13+ handles WASM better - minimal configuration needed
   config.optimization.moduleIds = 'named';
-
-  config.module.rules.push({
-      test: /\.wasm$/,
-      type: 'webassembly/async',
-  });
-
-  // TODO: improve this function -> track https://github.com/vercel/next.js/issues/25852
+  
+  // Set WASM output paths
   if (isServer) {
       config.output.webassemblyModuleFilename = './../static/wasm/[modulehash].wasm';
   } else {

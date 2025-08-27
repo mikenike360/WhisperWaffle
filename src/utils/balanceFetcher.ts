@@ -1,17 +1,19 @@
 import { LeoWalletAdapter } from '@demox-labs/aleo-wallet-adapter-leo';
+import { CUSTOM_TOKEN_DECIMALS } from '@/types';
 
-export interface BalanceRecord {
-  owner: string;
-  amount: string;
-  record: string; // Encrypted record data
-}
+// These interfaces are no longer needed since we're using the working API endpoint
+// export interface BalanceRecord {
+//   owner: string;
+//   amount: string;
+//   record: string; // Encrypted record data
+// }
 
-export interface TokenBalance {
-  symbol: string;
-  amount: string;
-  decimals: number;
-  isEncrypted: boolean;
-}
+// export interface TokenBalance {
+//   symbol: string;
+//   amount: string;
+//   decimals: number;
+//   isEncrypted: boolean;
+// }
 
 /**
  * Fetch ALEO balance from credits.aleo program
@@ -106,20 +108,47 @@ export async function fetchTokenBalance(
 }
 
 /**
- * Fetch custom token balance from token_registry.aleo
- * This queries the specific token ID you minted
+ * Fetch custom token balance from token_registry.aleo using our new API
+ * This now uses the working BHP256 hash computation
  */
 export async function fetchCustomTokenBalance(
   publicKey: string
 ): Promise<string> {
   try {
-    // For now, return a mock balance since we need to implement proper decryption
-    // TODO: Implement actual balance fetching from token_registry.aleo
     console.log('Fetching custom token balance for:', publicKey);
     
-    // Mock balance for testing - replace with actual implementation
-    return '1001.00'; // Your minted 1001 tokens
+    // Use our new API endpoint that computes the correct BHP256 hash
+    const TOKEN_ID = '42069187360666field'; // Updated to correct wUSDC token ID
+    const DECIMALS = CUSTOM_TOKEN_DECIMALS;
     
+    const url = `/api/token-balance?address=${encodeURIComponent(publicKey)}&tokenId=${encodeURIComponent(TOKEN_ID)}&decimals=${DECIMALS}`;
+    console.log('Fetching custom token balance from:', url);
+    const response = await fetch(url);
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('API response for custom token balance:', data);
+      
+      if (data.balance) {
+        return data.balance;
+      }
+      
+      return '0.00';
+    } else {
+      // Handle different error cases
+      const errorData = await response.json().catch(() => ({}));
+      console.warn('Failed to fetch custom token balance:', response.status, errorData);
+      
+      if (response.status === 404) {
+        // No balance found for this address/token combination
+        console.log('No balance found for address - returning 0.00');
+        return '0.00';
+      } else {
+        // Other error - return 0.00 but log the issue
+        console.error('Error fetching custom token balance:', errorData);
+        return '0.00';
+      }
+    }
   } catch (error) {
     console.error('Error fetching custom token balance:', error);
     return '0.00';
@@ -127,59 +156,97 @@ export async function fetchCustomTokenBalance(
 }
 
 /**
- * Decrypt balance records using the wallet
- * This is the proper way to get actual balances from encrypted records
+ * Fetch wALEO balance from token_registry.aleo
+ * This queries the wrapped ALEO token balance for the user's address
  */
-export async function decryptBalanceRecords(
-  wallet: LeoWalletAdapter,
+export async function fetchWrappedAleoBalance(
   publicKey: string
-): Promise<BalanceRecord[]> {
+): Promise<string> {
   try {
-    // This would use the wallet's decryption capabilities
-    // to decrypt the balance records from credits.aleo
-    console.log('Decrypting balance records for:', publicKey);
+    console.log('Fetching wALEO balance for:', publicKey);
     
-    // TODO: Implement actual decryption using wallet.adapter methods
-    // This might involve:
-    // 1. Fetching encrypted records from credits.aleo
-    // 2. Using wallet.adapter.decrypt() or similar method
-    // 3. Parsing the decrypted data to extract balances
+    // Use the wrapped ALEO token ID from your deployed program
+    const WRAPPED_ALEO_ID = '68744147421264673966385360field';
+    const DECIMALS = 6; // wALEO has 6 decimals like ALEO
     
-    return [];
+    const url = `/api/token-balance?address=${encodeURIComponent(publicKey)}&tokenId=${encodeURIComponent(WRAPPED_ALEO_ID)}&decimals=${DECIMALS}`;
+    console.log('Fetching wALEO balance from:', url);
+    const response = await fetch(url);
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('API response for wALEO balance:', data);
+      
+      if (data.balance) {
+        return data.balance;
+      }
+      
+      return '0.000000';
+    } else {
+      // Handle different error cases
+      const errorData = await response.json().catch(() => ({}));
+      console.warn('Failed to fetch wALEO balance:', response.status, errorData);
+      
+      if (response.status === 404) {
+        // No balance found for this address/token combination
+        console.log('No wALEO balance found for address - returning 0.000000');
+        return '0.000000';
+      } else {
+        // Other error - return 0.000000 but log the issue
+        console.error('Error fetching wALEO balance:', errorData);
+        return '0.000000';
+      }
+    }
   } catch (error) {
-    console.error('Error decrypting balance records:', error);
-    return [];
+    console.error('Error fetching wALEO balance:', error);
+    return '0.000000';
   }
 }
 
+// This function is no longer needed since we're using the working API endpoint
+// export async function decryptBalanceRecords(
+//   wallet: LeoWalletAdapter,
+//   publicKey: string
+// ): Promise<BalanceRecord[]> {
+//   // Removed - no longer needed with working BHP256 hash computation
+// }
+
 /**
- * Get all balances for a user (ALEO + tokens)
- * This combines direct queries and encrypted record decryption
+ * Get all balances for a user (ALEO + wALEO + wUSDC)
+ * This now uses our working API endpoints for accurate balance fetching
  */
 export async function fetchAllBalances(
   wallet: LeoWalletAdapter,
   publicKey: string
-): Promise<{ ALEO: string; USDC: string }> {
+): Promise<{ ALEO: string; WALEO: string; WUSDC: string }> {
   try {
+    console.log('Starting balance fetch for:', publicKey);
+    
     // Get ALEO balance from credits.aleo
     const aleoBalance = await fetchAleoBalance(publicKey);
+    console.log('ALEO balance fetched:', aleoBalance);
     
-    // Get token balances (these might also be encrypted records)
-    // For testing: using custom token instead of USDC
-    const usdcBalance = await fetchCustomTokenBalance(publicKey);
+    // Get wALEO balance from token_registry.aleo
+    const waleoBalance = await fetchWrappedAleoBalance(publicKey);
+    console.log('wALEO balance fetched:', waleoBalance);
     
-    // TODO: Implement proper decryption of encrypted records
-    // For now, we're using direct queries which may not work for all tokens
+    // Get custom token balance using our new working API
+    const wusdcBalance = await fetchCustomTokenBalance(publicKey);
+    console.log('wUSDC balance fetched:', wusdcBalance);
+    
+    console.log('Final balances:', { ALEO: aleoBalance, WALEO: waleoBalance, WUSDC: wusdcBalance });
     
     return {
       ALEO: aleoBalance,
-      USDC: usdcBalance,
+      WALEO: waleoBalance,
+      WUSDC: wusdcBalance,
     };
   } catch (error) {
     console.error('Error fetching all balances:', error);
     return {
       ALEO: '0.000000',
-      USDC: '0.00',
+      WALEO: '0.000000',
+      WUSDC: '0.00',
     };
   }
 }

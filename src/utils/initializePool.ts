@@ -3,7 +3,7 @@ import { Transaction, WalletAdapterNetwork } from '@demox-labs/aleo-wallet-adapt
 import { LeoWalletAdapter } from '@demox-labs/aleo-wallet-adapter-leo';
 import { CURRENT_NETWORK, PROGRAM_ID } from '@/types';
 
-export const INITIALIZE_POOL_FUNCTION = 'initialise_pool';
+export const INITIALIZE_POOL_FUNCTION = 'create_pool_public';
 
 // Import the fee calculator function
 import { getFeeForFunction } from '@/utils/feeCalculator';
@@ -46,8 +46,9 @@ export async function initializePool(
 
     // 1. Create the transaction input - use proper Leo type format
     const inputs = [
-      `${aleoAmount}000000u64`,  // ALEO amount in microcredits (u64 as expected by Leo)
-      `${usdcAmount}u128`        // Custom token amount (u128 as expected by Leo)
+      `${aleoAmount}000000u64`,         // ALEO amount in microcredits (u64 as expected by Leo)
+      `${usdcAmount}u128`,              // Custom token amount (u128 as expected by Leo)
+      `${usdcAmount * 1000000}u128`    // min_lp: u128 (minimum LP tokens to receive)
     ];
     console.log('Pool initialization inputs:', inputs);
 
@@ -69,11 +70,11 @@ export async function initializePool(
       feePrivate: false
     });
     
-    // 2. Build the transaction - use the v5 program ID
+    // 2. Build the transaction - use the v10 program ID
     const transaction = Transaction.createTransaction(
       publicKey,
       CURRENT_NETWORK,
-      'ww_swap_v5.aleo',
+      PROGRAM_ID,
       INITIALIZE_POOL_FUNCTION,
       inputs,
       fee,

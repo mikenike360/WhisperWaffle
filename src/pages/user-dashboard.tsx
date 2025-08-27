@@ -8,10 +8,12 @@ import { SwapTab, PoolTab, BalancesTab, SettingsTab } from '@/components/dashboa
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
 import { addLiquidity, removeLiquidity, calculateOptimalLiquidity, canAddLiquidity } from '@/utils/addLiquidity';
+import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
+import { CURRENT_NETWORK } from '@/types';
 
 const SwapPage: NextPageWithLayout = () => {
   const { wallet, publicKey } = useWallet();
-  const [activeTab, setActiveTab] = useState<'swap' | 'pool' | 'balances' | 'settings'>('swap');
+  const [activeTab, setActiveTab] = useState<'swap' | 'pool' | 'balances' | 'settings' | 'deposit'>('swap');
   const { randomImages, isClient } = useRandomImages();
   // Tabs managed here; tab content handled by components
   const sideImage =
@@ -21,8 +23,10 @@ const SwapPage: NextPageWithLayout = () => {
       ? '/waffle_bank.png'
       : activeTab === 'settings'
       ? '/waffle_settings.png'
+      : activeTab === 'deposit'
+      ? '/waffle_bank.png'
       : '/syrup_swap.png';
-  const { poolData, loading: poolLoading, error: poolError } = usePoolData();
+  const { poolData, loading: poolLoading, error: poolError, refreshPoolData } = usePoolData();
   const { balances, loading: balancesLoading, refreshBalances } = useUserBalances();
   const [aleoAmount, setAleoAmount] = useState('');
   const [usdcAmount, setUsdcAmount] = useState('');
@@ -32,7 +36,22 @@ const SwapPage: NextPageWithLayout = () => {
   const [lpToBurn, setLpToBurn] = useState('');
   const [minAleoOut, setMinAleoOut] = useState('');
   const [minTokenOut, setMinTokenOut] = useState('');
+  
+  // Deposit state variables
+  const [depositAleoAmount, setDepositAleoAmount] = useState('');
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [depositTxStatus, setDepositTxStatus] = useState<string | null>(null);
+  
+  // Withdraw state variables
+  const [withdrawWaleoAmount, setWithdrawWaleoAmount] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawTxStatus, setWithdrawTxStatus] = useState<string | null>(null);
+  
+  // Deposit/Withdraw sub-tab state
+  const [depositSubTab, setDepositSubTab] = useState<'deposit' | 'withdraw'>('deposit');
 
+  // Note: aleoAmount now represents wALEO amount for liquidity operations
+  // depositAleoAmount represents native ALEO amount for wrapping
   const handleAleoChange = useCallback((value: string) => {
     setAleoAmount(value);
     if (poolData && value && !isNaN(parseFloat(value))) {
@@ -47,11 +66,11 @@ const SwapPage: NextPageWithLayout = () => {
     setUsdcAmount(value);
     if (poolData && value && !isNaN(parseFloat(value))) {
       const { ra, rb } = poolData;
-      const aleoReserve = ra / 1000000;
-      const usdcReserve = rb / 1000000;
-      if (usdcReserve > 0) {
-        const optimalAleo = (parseFloat(value) * aleoReserve) / usdcReserve;
-        setAleoAmount(optimalAleo.toFixed(9));
+      const waleoReserve = ra / 1000000; // Wrapped ALEO reserve
+      const wusdcReserve = rb / 1000000; // Waffle USDC reserve
+      if (wusdcReserve > 0) {
+        const optimalWaleo = (parseFloat(value) * waleoReserve) / wusdcReserve;
+        setAleoAmount(optimalWaleo.toFixed(6));
       }
     } else if (!value) {
       setAleoAmount('');
@@ -67,8 +86,8 @@ const SwapPage: NextPageWithLayout = () => {
 
   const canAdd = aleoAmount && usdcAmount &&
     parseFloat(aleoAmount) > 0 && parseFloat(usdcAmount) > 0 &&
-    parseFloat(aleoAmount) <= getBalance('ALEO') &&
-    parseFloat(usdcAmount) <= getBalance('USDC');
+    parseFloat(aleoAmount) <= getBalance('WALEO') &&
+    parseFloat(usdcAmount) <= getBalance('WUSDC');
 
   const handleAddLiquidity = useCallback(async () => {
     if (!publicKey || !wallet) return;
@@ -144,6 +163,124 @@ const SwapPage: NextPageWithLayout = () => {
     }
   }, [publicKey, wallet, lpToBurn, minAleoOut, minTokenOut, poolData, refreshBalances]);
 
+  // Handle ALEO deposit to get wALEO
+  const handleDepositAleo = useCallback(async () => {
+    if (!publicKey || !wallet) return;
+    
+    const aleoAmt = parseFloat(depositAleoAmount);
+    if (!aleoAmt || aleoAmt <= 0) {
+      setDepositTxStatus('Please enter a valid ALEO amount');
+      return;
+    }
+
+    if (aleoAmt > getBalance('ALEO')) {
+      setDepositTxStatus('Insufficient ALEO balance');
+      return;
+    }
+
+    try {
+      setIsDepositing(true);
+      setDepositTxStatus('Depositing ALEO...');
+
+      // Convert to microcredits (6 decimals)
+      const aleoMicrocredits = Math.floor(aleoAmt * 1000000);
+
+      // Create transaction using the correct API
+      const transaction = Transaction.createTransaction(
+        publicKey,
+        CURRENT_NETWORK,
+        'ww_swap_wrapped_credits_v1.aleo',
+        'deposit_credits_public_signer',
+        [`${aleoMicrocredits}u64`], // Explicitly format as u64
+        500000, // fee in microcredits (0.5 ALEO) - TODO: Update to exact fee when available
+        false
+      );
+
+      // Submit and wait for completion
+      const id = await wallet.adapter.requestTransaction(transaction);
+      if (!id) throw new Error('No transaction ID returned from wallet');
+      
+      let status = await wallet.adapter.transactionStatus(id);
+      let attempts = 0;
+      while (status === 'Pending' && attempts < 60) {
+        await new Promise((r) => setTimeout(r, 1000));
+        status = await wallet.adapter.transactionStatus(id);
+        attempts++;
+      }
+      
+      if (status === 'Completed' || status === 'Finalized') {
+        setDepositTxStatus('ALEO deposited successfully! You now have wALEO tokens.');
+        setDepositAleoAmount('');
+        setTimeout(() => refreshBalances(), 1500);
+      } else {
+        setDepositTxStatus(`Transaction failed with status: ${status}`);
+      }
+    } catch (e: any) {
+      setDepositTxStatus(`Error: ${e?.message || 'Failed to deposit ALEO'}`);
+    } finally {
+      setIsDepositing(false);
+    }
+  }, [publicKey, wallet, depositAleoAmount, refreshBalances]);
+
+  // Handle wALEO withdrawal to get ALEO back
+  const handleWithdrawWaleo = useCallback(async () => {
+    if (!publicKey || !wallet) return;
+    
+    const waleoAmt = parseFloat(withdrawWaleoAmount);
+    if (!waleoAmt || waleoAmt <= 0) {
+      setWithdrawTxStatus('Please enter a valid wALEO amount');
+      return;
+    }
+
+    if (waleoAmt > getBalance('WALEO')) {
+      setWithdrawTxStatus('Insufficient wALEO balance');
+      return;
+    }
+
+    try {
+      setIsWithdrawing(true);
+      setWithdrawTxStatus('Withdrawing wALEO...');
+
+      // Convert to smallest units (6 decimals)
+      const waleoUnits = Math.floor(waleoAmt * 1000000);
+
+      // Create transaction using the correct API
+      const transaction = Transaction.createTransaction(
+        publicKey,
+        CURRENT_NETWORK,
+        'ww_swap_wrapped_credits_v1.aleo',
+        'withdraw_credits_public_signer',
+        [`${waleoUnits}u64`], // Explicitly format as u64
+        500000, // fee in microcredits (0.5 ALEO) - TODO: Update to exact fee when available
+        false
+      );
+
+      // Submit and wait for completion
+      const id = await wallet.adapter.requestTransaction(transaction);
+      if (!id) throw new Error('No transaction ID returned from wallet');
+      
+      let status = await wallet.adapter.transactionStatus(id);
+      let attempts = 0;
+      while (status === 'Pending' && attempts < 60) {
+        await new Promise((r) => setTimeout(r, 1000));
+        status = await wallet.adapter.transactionStatus(id);
+        attempts++;
+      }
+      
+      if (status === 'Completed' || status === 'Finalized') {
+        setWithdrawTxStatus('wALEO withdrawn successfully! You now have ALEO back.');
+        setWithdrawWaleoAmount('');
+        setTimeout(() => refreshBalances(), 1500);
+      } else {
+        setWithdrawTxStatus(`Transaction failed with status: ${status}`);
+      }
+    } catch (e: any) {
+      setWithdrawTxStatus(`Error: ${e?.message || 'Failed to withdraw wALEO'}`);
+    } finally {
+      setIsWithdrawing(false);
+    }
+  }, [publicKey, wallet, withdrawWaleoAmount, refreshBalances]);
+
   return (
     <div>
       <NextSeo title="WhisperWaffle Dashboard" />
@@ -152,12 +289,8 @@ const SwapPage: NextPageWithLayout = () => {
           <div className="grid md:grid-cols-5">
             <div className="md:col-span-3 p-6 text-gray-900">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <img src={randomImages.header.src} alt={randomImages.header.alt} className="w-12 h-12 object-contain" />
-              <h1 className="text-3xl font-bold text-gray-800">🧇 WhisperWaffle Dashboard</h1>
-            </div>
-            <div className="flex items-center gap-2" />
+          <div className="flex items-center justify-center mb-6">
+            <img src="/logo.png" alt="WhisperWaffle Logo" className="h-32 md:h-48 lg:h-72 object-contain" />
           </div>
 
           {/* Tab Navigation */}
@@ -180,7 +313,17 @@ const SwapPage: NextPageWithLayout = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              📊 Pool Info
+              🌊 Pool
+            </button>
+            <button
+              onClick={() => setActiveTab('deposit')}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'deposit'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              💸 Deposit
             </button>
             <button
               onClick={() => setActiveTab('balances')}
@@ -206,7 +349,7 @@ const SwapPage: NextPageWithLayout = () => {
 
           {/* Tab Content */}
           <div className="min-h-[400px]">
-            {activeTab === 'swap' && <SwapTab />}
+            {activeTab === 'swap' && <SwapTab refreshPoolData={refreshPoolData} />}
             {activeTab === 'pool' && (
               <div className="grid grid-cols-1 gap-6">
                 {/* Pool Stats */}
@@ -229,11 +372,11 @@ const SwapPage: NextPageWithLayout = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-white rounded-lg border">
                         <div className="text-2xl font-bold text-green-600 mb-2">{(poolData.ra / 1_000_000).toLocaleString()}</div>
-                        <div className="text-sm text-gray-600">ALEO Reserve</div>
+                        <div className="text-sm text-gray-600">Wrapped ALEO Reserve</div>
                       </div>
                       <div className="p-4 bg-white rounded-lg border">
                         <div className="text-2xl font-bold text-blue-600 mb-2">{(poolData.rb / 1_000_000).toLocaleString()}</div>
-                        <div className="text-sm text-gray-600">Custom Token Reserve</div>
+                        <div className="text-sm text-gray-600">Waffle USDC Reserve</div>
                       </div>
                     </div>
                   ) : (
@@ -269,7 +412,7 @@ const SwapPage: NextPageWithLayout = () => {
                   {poolSubTab === 'add' && (
                     <div className="space-y-4 p-4">
                       <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">ALEO Amount</label>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Wrapped ALEO Amount</label>
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -281,17 +424,17 @@ const SwapPage: NextPageWithLayout = () => {
                             step="0.000001"
                           />
                           <button
-                            onClick={() => handleAleoChange(String(getBalance('ALEO') * 0.9995))}
+                            onClick={() => handleAleoChange(String(getBalance('WALEO') * 0.9995))}
                             className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                           >
                             MAX
                           </button>
                         </div>
-                        <div className="text-xs text-gray-500">Balance: {getBalance('ALEO').toFixed(6)} ALEO</div>
+                        <div className="text-xs text-gray-500">Balance: {getBalance('WALEO').toFixed(6)} wALEO</div>
                       </div>
 
                       <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Custom Token Amount</label>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Waffle USDC Amount</label>
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -303,13 +446,13 @@ const SwapPage: NextPageWithLayout = () => {
                             step="0.01"
                           />
                           <button
-                            onClick={() => handleUsdcChange(String(getBalance('USDC') * 0.9995))}
+                            onClick={() => handleUsdcChange(String(getBalance('WUSDC') * 0.9995))}
                             className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                           >
                             MAX
                           </button>
                         </div>
-                        <div className="text-xs text-gray-500">Balance: {getBalance('USDC').toFixed(6)} USDC</div>
+                        <div className="text-xs text-gray-500">Balance: {getBalance('WUSDC').toFixed(6)} wUSDC</div>
                       </div>
 
                       <button
@@ -319,6 +462,14 @@ const SwapPage: NextPageWithLayout = () => {
                       >
                         {!publicKey ? 'Connect Wallet' : isAddingLiquidity ? 'Adding Liquidity...' : 'Add Liquidity'}
                       </button>
+                      
+                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="text-xs text-blue-800">
+                          <strong>💡 Note:</strong> You need wALEO tokens to add liquidity. 
+                          Use the Deposit tab to convert your ALEO to wALEO first.
+                        </div>
+                      </div>
+                      
                       {txStatus && (
                         <div className={`p-3 rounded-lg ${txStatus.startsWith('Error') ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>
                           {txStatus}
@@ -343,7 +494,7 @@ const SwapPage: NextPageWithLayout = () => {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="text-sm font-medium text-gray-700 mb-2 block">Min ALEO Out</label>
+                          <label className="text-sm font-medium text-gray-700 mb-2 block">Min Wrapped ALEO Out</label>
                           <input
                             type="number"
                             placeholder="0.0"
@@ -355,7 +506,7 @@ const SwapPage: NextPageWithLayout = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-sm font-medium text-gray-700 mb-2 block">Min Token Out</label>
+                          <label className="text-sm font-medium text-gray-700 mb-2 block">Min Waffle USDC Out</label>
                           <input
                             type="number"
                             placeholder="0.0"
@@ -386,6 +537,141 @@ const SwapPage: NextPageWithLayout = () => {
               </div>
             )}
             {activeTab === 'balances' && <BalancesTab />}
+            {activeTab === 'deposit' && (
+              <div className="p-6 border rounded-xl bg-white/80">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-semibold text-gray-800">Wrapped Token Operations</h3>
+                </div>
+                
+                {/* Sub-tabs: Deposit / Withdraw */}
+                <div className="flex border-b border-gray-200 mb-4">
+                  <button
+                    onClick={() => setDepositSubTab('deposit')}
+                    className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      depositSubTab === 'deposit'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    💰 Deposit ALEO
+                  </button>
+                  <button
+                    onClick={() => setDepositSubTab('withdraw')}
+                    className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      depositSubTab === 'withdraw'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    🔄 Withdraw wALEO
+                  </button>
+                </div>
+
+                {depositSubTab === 'deposit' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">ALEO Amount to Deposit</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          placeholder="0.0"
+                          value={depositAleoAmount}
+                          onChange={(e) => setDepositAleoAmount(e.target.value)}
+                          className="flex-1 border rounded-lg px-3 py-2"
+                          min="0"
+                          step="0.000001"
+                        />
+                        <button
+                          onClick={() => setDepositAleoAmount(String(getBalance('ALEO') * 0.9995))}
+                          className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                          MAX
+                        </button>
+                      </div>
+                      <div className="text-xs text-gray-500">Balance: {getBalance('ALEO').toFixed(6)} ALEO</div>
+                    </div>
+
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="text-sm text-blue-800">
+                        <strong>What happens when you deposit:</strong>
+                        <ul className="mt-2 list-disc list-inside space-y-1">
+                          <li>Your ALEO is sent to the wrapped credits program</li>
+                          <li>You receive wALEO tokens in return (1:1 ratio)</li>
+                          <li>wALEO tokens can be used for swaps in the DEX</li>
+                          <li>You can withdraw wALEO back to ALEO anytime</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleDepositAleo}
+                      disabled={!depositAleoAmount || isDepositing || !publicKey}
+                      className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {!publicKey ? 'Connect Wallet' : isDepositing ? 'Depositing...' : 'Deposit ALEO'}
+                    </button>
+                    
+                    {depositTxStatus && (
+                      <div className={`p-3 rounded-lg ${depositTxStatus.startsWith('Error') ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>
+                        {depositTxStatus}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {depositSubTab === 'withdraw' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">wALEO Amount to Withdraw</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          placeholder="0.0"
+                          value={withdrawWaleoAmount}
+                          onChange={(e) => setWithdrawWaleoAmount(e.target.value)}
+                          className="flex-1 border rounded-lg px-3 py-2"
+                          min="0"
+                          step="0.000001"
+                        />
+                        <button
+                          onClick={() => setWithdrawWaleoAmount(String(getBalance('WALEO') * 0.9995))}
+                          className="px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                          MAX
+                        </button>
+                      </div>
+                      <div className="text-xs text-gray-500">Balance: {getBalance('WALEO').toFixed(6)} wALEO</div>
+                    </div>
+
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <div className="text-sm text-green-800">
+                        <strong>What happens when you withdraw:</strong>
+                        <ul className="mt-2 list-disc list-inside space-y-1">
+                          <li>Your wALEO tokens are burned</li>
+                          <li>You receive ALEO back (1:1 ratio)</li>
+                          <li>You can use the ALEO for other purposes</li>
+                          <li>You can always deposit ALEO again to get more wALEO</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleWithdrawWaleo}
+                      disabled={!withdrawWaleoAmount || isWithdrawing || !publicKey}
+                      className="w-full bg-green-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {!publicKey ? 'Connect Wallet' : isWithdrawing ? 'Withdrawing...' : 'Withdraw wALEO'}
+                    </button>
+                    
+                    {withdrawTxStatus && (
+                      <div className={`p-3 rounded-lg ${withdrawTxStatus.startsWith('Error') ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>
+                        {withdrawTxStatus}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {activeTab === 'settings' && <SettingsTab />}
           </div>
             </div>

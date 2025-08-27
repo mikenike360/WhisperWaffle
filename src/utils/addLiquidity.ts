@@ -2,20 +2,10 @@
 import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
 import { CURRENT_NETWORK, PROGRAM_ID } from '../types';
 
-// v9 functions
+// v10 functions
 const ADD_LIQUIDITY_FUNCTION = 'add_liquidity_public';
 const CREATE_POOL_FUNCTION = 'create_pool_public';
-const REMOVE_LIQUIDITY_FUNCTION = 'remove_liquidity';
-
-// External programs
-const CREDITS_PROGRAM = 'credits.aleo';
-const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
-
-// MVP custody address (holds pool assets)
-const CUSTODY_ADDRESS = 'aleo1xh0ncflwkfzga983lwujsha729c8nwu7phfn8aw7h3gahhj0ms8qytrxec';
-
-// Custom token id used in the program (keep in sync with Leo const TOKEN_ID)
-const CUSTOM_TOKEN_ID = '987654321987654321field';
+const REMOVE_LIQUIDITY_FUNCTION = 'remove_liquidity_public';
 
 // Interface for pool data
 interface PoolData {
@@ -27,8 +17,8 @@ interface PoolData {
 /**
  * Add liquidity to the WhisperWaffle pool
  * @param wallet - The user's wallet
- * @param aleoAmount - Amount of ALEO to add (in microcredits)
- * @param usdcAmount - Amount of custom token to add (in smallest units)
+ * @param aleoAmount - Amount of WALEO to add (in smallest units, 6 decimals)
+ * @param usdcAmount - Amount of WUSDC to add (in smallest units, 6 decimals)
  * @param minLpTokens - Minimum LP tokens to receive (slippage protection)
  * @param currentPoolData - Current pool state data
  * @returns Promise<boolean> - Success status
@@ -47,12 +37,12 @@ export async function addLiquidity(
 
     const publicKey = wallet.adapter.publicKey.toString();
     
-    // Calculate fee (in micro credits)
-    const fee = 60000; // 0.06 ALEO for transaction fee
+    // Calculate fee (in micro credits) - Updated based on leo execute testing
+    const fee = 276442; // 0.276442 ALEO for add_liquidity_public (from testing)
     
     console.log('Adding liquidity with parameters:', {
-      aleoAmount,
-      usdcAmount,
+      waleoAmount: aleoAmount, // Amount of WALEO (in smallest units)
+      wusdcAmount: usdcAmount, // Amount of WUSDC (in smallest units)
       minLpTokens,
       fee,
       publicKey
@@ -75,34 +65,6 @@ export async function addLiquidity(
       return id;
     };
 
-    // 1) Transfer ALEO (u64) to custody
-    const creditsInputs = [CUSTODY_ADDRESS, `${BigInt(aleoAmount)}u64`];
-    const txCredits = Transaction.createTransaction(
-      publicKey,
-      CURRENT_NETWORK,
-      CREDITS_PROGRAM,
-      'transfer_public',
-      creditsInputs,
-      fee,
-      false
-    );
-    console.log('Submitting credits transfer:', creditsInputs);
-    await sendAndWait(txCredits);
-
-    // 2) Transfer custom token (u128) to custody
-    const tokenInputs = [CUSTOM_TOKEN_ID, CUSTODY_ADDRESS, `${BigInt(usdcAmount)}u128`];
-    const txToken = Transaction.createTransaction(
-      publicKey,
-      CURRENT_NETWORK,
-      TOKEN_REGISTRY_PROGRAM,
-      'transfer_public',
-      tokenInputs,
-      fee,
-      false
-    );
-    console.log('Submitting token transfer:', tokenInputs);
-    await sendAndWait(txToken);
-
     // Determine if pool exists: call our API (returns ra/rb)
     let isNewPool = false;
     try {
@@ -114,82 +76,29 @@ export async function addLiquidity(
       isNewPool = false;
     }
 
-    // 3) Warm-up: call test_connection once to mitigate SDK exposure lag
-    try {
-      const warmupTx = Transaction.createTransaction(
-        publicKey,
-        CURRENT_NETWORK,
-        PROGRAM_ID,
-        'test_connection',
-        [],
-        fee,
-        false
-      );
-      console.log('Submitting warm-up call (test_connection)');
-      await sendAndWait(warmupTx);
-    } catch (e) {
-      console.warn('Warm-up call failed, proceeding anyway:', e);
-    }
-
-    // 4) State update on our DEX program
-    const poolId = '1field';
-    const aleoU64 = `${BigInt(aleoAmount)}u64`;
-    const tokenU128 = `${BigInt(usdcAmount)}u128`;
+    // Call the DEX program directly - it handles all transfers internally
+    const poolId = '1field'; // Updated to match program's actual pool ID
+    const waleoU128 = `${BigInt(aleoAmount)}u128`; // Changed from u64 to u128 for wrapped ALEO
+    const wusdcU128 = `${BigInt(usdcAmount)}u128`; // Changed variable name for clarity
     const minLpU128 = `${BigInt(minLpTokens)}u128`;
 
     const functionName = isNewPool ? CREATE_POOL_FUNCTION : ADD_LIQUIDITY_FUNCTION;
     const stateInputs = isNewPool
-      ? [CUSTODY_ADDRESS, aleoU64, tokenU128, minLpU128]
-      : [poolId, CUSTODY_ADDRESS, aleoU64, tokenU128, minLpU128];
+      ? [waleoU128, wusdcU128, minLpU128] // create_pool_public expects (waleo, wusdc, min_lp)
+      : [poolId, waleoU128, wusdcU128, minLpU128]; // add_liquidity_public expects (pool_id, waleo, wusdc, min_lp)
 
-    console.log(`Submitting DEX state update (${functionName}):`, stateInputs);
+    console.log(`Submitting DEX liquidity operation (${functionName}):`, stateInputs);
 
-    const attemptDex = async () => {
-      const txDex = Transaction.createTransaction(
-        publicKey,
-        CURRENT_NETWORK,
-        PROGRAM_ID,
-        functionName,
-        stateInputs,
-        fee,
-        false
-      );
-      return sendAndWait(txDex);
-    };
-
-    // Retry a few times to dodge transient "Invalid Aleo program: undefined"
-    const delays = [500, 1500, 3000];
-    let lastErr: any = null;
-    for (let i = 0; i < delays.length; i++) {
-      try {
-        await attemptDex();
-        lastErr = null;
-        break;
-      } catch (e: any) {
-        lastErr = e;
-        const msg = (e?.message || '').toString();
-        if (msg.includes('Invalid Aleo program')) {
-          console.warn(`DEX call attempt ${i + 1} failed with program exposure error, retrying after ${delays[i]}ms`);
-          await new Promise((r) => setTimeout(r, delays[i]));
-          // Re-run warmup once more before retry
-          try {
-            const warm2 = Transaction.createTransaction(
-              publicKey,
-              CURRENT_NETWORK,
-              PROGRAM_ID,
-              'test_connection',
-              [],
-              fee,
-              false
-            );
-            await sendAndWait(warm2);
-          } catch (_) {}
-          continue;
-        }
-        break;
-      }
-    }
-    if (lastErr) throw lastErr;
+    const txDex = Transaction.createTransaction(
+      publicKey,
+      CURRENT_NETWORK,
+      PROGRAM_ID,
+      functionName,
+      stateInputs,
+      fee,
+      false
+    );
+    await sendAndWait(txDex);
 
     console.log('Liquidity added successfully!');
     return true;
@@ -223,8 +132,8 @@ export async function removeLiquidity(
 
     const publicKey = wallet.adapter.publicKey.toString();
     
-    // Calculate fee (in micro credits)
-    const fee = 60000; // 0.06 ALEO for transaction fee
+    // Calculate fee (in micro credits) - Updated based on leo execute testing
+    const fee = 279388; // 0.279388 ALEO for remove_liquidity_public (from testing)
     
     console.log('Removing liquidity with parameters:', {
       lpTokensToBurn,
@@ -234,25 +143,25 @@ export async function removeLiquidity(
       publicKey
     });
 
-    // For v6, we need to specify the pool_id (using 1field for now)
+    // Call the DEX program directly - it handles all transfers internally
     const poolId = '1field';
     
-    // Create the transaction inputs for remove_liquidity
-    // Function signature: remove_liquidity(pool_id: field, lp_tokens_to_burn: u128, min_token1_out: u128, min_token2_out: u128)
+    // Create the transaction inputs for remove_liquidity_public
+    // Function signature: remove_liquidity_public(pool_id: field, lp_tokens_to_burn: u128, min_aleo_out: u128, min_token_out: u128)
     const removeLiquidityInput = [
       poolId,                           // pool_id: field
       `${lpTokensToBurn}u128`,          // lp_tokens_to_burn: u128
-      `${minAleoOut}u128`,              // min_token1_out: u128 (ALEO)
-      `${minUsdcOut}u128`               // min_token2_out: u128 (custom token)
+      `${minAleoOut}u128`,              // min_aleo_out: u128 (ALEO)
+      `${minUsdcOut}u128`               // min_token_out: u128 (custom token)
     ];
 
-    console.log('Creating transaction with inputs:', removeLiquidityInput);
+    console.log('Creating remove liquidity transaction with inputs:', removeLiquidityInput);
 
     // Create the transaction
     const transTx = Transaction.createTransaction(
       publicKey,
       CURRENT_NETWORK,
-      PROGRAM_ID, // Use v6 program
+      PROGRAM_ID,
       REMOVE_LIQUIDITY_FUNCTION,
       removeLiquidityInput,
       fee,
@@ -297,10 +206,10 @@ export async function removeLiquidity(
 
 /**
  * Checks if the pool can accept new liquidity.
- * With v4, pools can always accept new liquidity.
+ * With v10, pools can always accept new liquidity.
  */
 export function canAddLiquidity(poolData: any): boolean {
-      // In v4, pools can always accept new liquidity
+  // In v10, pools can always accept new liquidity
   return true;
 }
 
@@ -316,11 +225,14 @@ export function calculateOptimalLiquidity(
   }
 
   const { ra, rb } = poolData;
+  // Calculate optimal amounts based on current pool ratios
   const aleoReserve = ra / 1000000; // Convert from microcredits
-  const usdcReserve = rb / 1000000; // Convert from microcredits
+  const usdcReserve = rb / 1000000; // Convert from smallest units
+  
+  console.log(`Current reserves: ${aleoReserve} wALEO, ${usdcReserve} wUSDC`);
   
   if (aleoReserve === 0 || usdcReserve === 0) {
-    // If pool is empty, use the input amounts as-is
+    console.log('Pool has zero reserves - cannot calculate optimal amounts');
     return { aleoAmount: aleoInput, usdcAmount: aleoInput * 1.5 }; // Assume 1 ALEO = $1.5 USDC
   }
   
@@ -331,7 +243,7 @@ export function calculateOptimalLiquidity(
 }
 
 /**
- * Fetches user's liquidity position from the v4 program.
+ * Fetches user's liquidity position from the v10 program.
  */
 export async function getUserPosition(publicKey: string): Promise<{
   aleoAmount: number;
@@ -340,7 +252,7 @@ export async function getUserPosition(publicKey: string): Promise<{
   timestamp: number;
 } | null> {
   try {
-    // This would call the get_user_position function on the Leo program
+    // This would call the get_user_liquidity_position function on the Leo program
     // For now, return mock data
     return {
       aleoAmount: 0,

@@ -5,14 +5,16 @@ import { fetchAllBalances } from '../utils/balanceFetcher';
 
 interface UserBalances {
   ALEO: string;
-  USDC: string;
+  WALEO: string;
+  WUSDC: string;
 }
 
 export const useUserBalances = () => {
   const { wallet, publicKey } = useWallet();
   const [balances, setBalances] = useState<UserBalances>({
     ALEO: '0',
-    USDC: '0',
+    WALEO: '0',
+    WUSDC: '0',
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +36,12 @@ export const useUserBalances = () => {
       setError(err instanceof Error ? err.message : 'Failed to fetch balances');
       console.error('Error fetching balances:', err);
       
-      // Fallback to mock data if wallet calls fail
-      const fallbackBalances: UserBalances = {
-        ALEO: '1234.56789',
-        USDC: '2500.00',
-      };
-      setBalances(fallbackBalances);
+      // Don't use fallback data - show real errors to users
+      setBalances({
+        ALEO: '0.000000',
+        WALEO: '0.000000',
+        WUSDC: '0.00',
+      });
     } finally {
       setLoading(false);
     }

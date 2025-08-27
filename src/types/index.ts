@@ -37,4 +37,8 @@ export type BountyData = {
 };
 
 // Program ID - automatically read from Leo source
-export const PROGRAM_ID = 'ww_swap_v9.aleo'; // This will be dynamically updated
+export const PROGRAM_ID = 'ww_swap_v13.aleo'; // This will be dynamically updated
+
+// Custom token defaults (sync with program/src/main.leo TOKEN_ID and token decimals)
+export const CUSTOM_TOKEN_ID = '42069187360666field'; // Updated to correct wUSDC token ID
+export const CUSTOM_TOKEN_DECIMALS = 6;

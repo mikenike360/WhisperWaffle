@@ -1,13 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { CURRENT_NETWORK, CURRENT_RPC_URL, PROGRAM_ID } from '@/types';
 
-type Data = {
+interface PoolResponse {
   ok: boolean;
-  ra?: number; // ALEO reserve
-  rb?: number; // Custom token reserve
-  raw?: string;
+  ra?: number; // Wrapped ALEO reserve
+  rb?: number; // Waffle USDC reserve
+  raw?: any;
   error?: string;
-};
+}
 
 // Try multiple likely explorer endpoints to fetch mapping value
 const candidateUrls = (programId: string) => {
@@ -38,7 +38,7 @@ function parseMappingValue(raw: string) {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<Data>
+  res: NextApiResponse<PoolResponse>
 ) {
   try {
     const programId = PROGRAM_ID;

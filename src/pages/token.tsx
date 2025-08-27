@@ -30,7 +30,9 @@ const TokenPage: NextPageWithLayout = () => {
     name: '',
     symbol: '',
     decimals: '6',
-    maxSupply: '1000000000'
+    maxSupply: '1000000000',
+    noExternalAuth: true, // Default to true (no external auth required)
+    externalAuthParty: '' // External authorization party address
   });
 
   // Token minting state
@@ -101,13 +103,17 @@ const TokenPage: NextPageWithLayout = () => {
       // Create token data object for registration
       const tokenData = {
         tokenId: registrationData.tokenId,
-        totalSupply: registrationData.maxSupply,
-        circulatingSupply: '0',
+        name: registrationData.name,
+        symbol: registrationData.symbol,
         decimals: registrationData.decimals,
         maxSupply: registrationData.maxSupply,
-        isMintable: true,
-        owner: publicKey.toString()
+        externalAuthorizationRequired: !registrationData.noExternalAuth, // Invert the checkbox value
+        externalAuthorizationParty: registrationData.noExternalAuth ? publicKey.toString() : (registrationData.externalAuthParty || publicKey.toString()) // Use user's address if no external auth, otherwise use provided address or default to user's address
       };
+      
+      console.log('Token registration data:', tokenData);
+      console.log('External auth required:', tokenData.externalAuthorizationRequired);
+      console.log('External auth party:', tokenData.externalAuthorizationParty);
 
       const txId = await registerToken(
         wallet,
@@ -123,7 +129,9 @@ const TokenPage: NextPageWithLayout = () => {
           name: '',
           symbol: '',
           decimals: '6',
-          maxSupply: '1000000000'
+          maxSupply: '1000000000',
+          noExternalAuth: true,
+          externalAuthParty: ''
         });
       } else {
         setMessage('Failed to register token');
@@ -313,7 +321,7 @@ const TokenPage: NextPageWithLayout = () => {
                     type="text"
                     value={registrationData.tokenId}
                     onChange={(e) => setRegistrationData({ ...registrationData, tokenId: e.target.value })}
-                    placeholder="e.g., 987654321987654321field"
+                    placeholder="e.g., 42069187360field"
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
                 </div>
@@ -370,6 +378,44 @@ const TokenPage: NextPageWithLayout = () => {
                   />
                 </div>
                 
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="noExternalAuth"
+                    checked={registrationData.noExternalAuth}
+                    onChange={(e) => setRegistrationData({ ...registrationData, noExternalAuth: e.target.checked })}
+                    className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="noExternalAuth" className="text-sm font-medium text-gray-700">
+                    No External Authorization Required
+                  </label>
+                </div>
+                
+                {!registrationData.noExternalAuth && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      External Authorization Party
+                    </label>
+                    <input
+                      type="text"
+                      value={registrationData.externalAuthParty}
+                      onChange={(e) => setRegistrationData({ ...registrationData, externalAuthParty: e.target.value })}
+                      placeholder={publicKey || "aleo1..."}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                      Address that can authorize token spending (leave empty to use your address)
+                    </p>
+                  </div>
+                )}
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-700">
+                    <strong>ℹ️ External Authorization:</strong> When checked, tokens can be transferred directly without requiring external approval. 
+                    Leave unchecked if you want to require external authorization for spending.
+                  </p>
+                </div>
+                
                 <button
                   onClick={handleRegisterToken}
                   disabled={loading}
@@ -394,7 +440,7 @@ const TokenPage: NextPageWithLayout = () => {
                     type="text"
                     value={mintingData.tokenId}
                     onChange={(e) => setMintingData({ ...mintingData, tokenId: e.target.value })}
-                    placeholder="e.g., 987654321987654321field"
+                    placeholder="e.g., 42069187360field"
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   />
                 </div>

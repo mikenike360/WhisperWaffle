@@ -44,9 +44,25 @@ function ThemeSelector() {
   );
 }
 
-function HeaderRightArea() {
+function HeaderRightArea({ devMode, setDevMode }: { devMode: boolean; setDevMode: (value: boolean) => void }) {
   return (
     <div className="relative order-last flex shrink-0 items-center gap-3 sm:gap-6 lg:gap-8 btn-primary-content text-primary">
+      {/* Dev Mode Toggle */}
+      <div className="flex items-center gap-2">
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={devMode}
+            onChange={(e) => setDevMode(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+          <span className={`ml-3 text-sm font-medium ${devMode ? 'text-amber-600 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>
+            {devMode ? '🔧 Dev Mode' : 'Dev Mode'}
+          </span>
+        </label>
+      </div>
+      
       {/* Use the updated ThemeSelector */}
       <ThemeSelector />
       <WalletMultiButton />
@@ -57,6 +73,19 @@ function HeaderRightArea() {
 export function Header() {
   const windowScroll = useWindowScroll();
   const isMounted = useIsMounted();
+  const [devMode, setDevMode] = useState(false);
+
+  // Load dev mode setting from localStorage on mount
+  useEffect(() => {
+    const savedDevMode = localStorage.getItem('devMode') === 'true';
+    setDevMode(savedDevMode);
+  }, []);
+
+  // Save dev mode setting to localStorage when it changes
+  const handleDevModeChange = (value: boolean) => {
+    setDevMode(value);
+    localStorage.setItem('devMode', value.toString());
+  };
 
   return (
     <nav
@@ -88,6 +117,36 @@ export function Header() {
           >
             🪙 Token
           </a>
+
+          {/* Dev Mode Navigation Links - Only shown when devMode is true */}
+          {devMode && (
+            <>
+              <div className="w-px h-6 bg-amber-400 mx-2"></div>
+              {/* Transfer Test Navigation Link */}
+              <a
+                href="/transfer-test"
+                className="bg-amber-100 bg-opacity-80 border border-amber-300 rounded-full px-4 py-2 text-sm font-medium hover:bg-amber-200 transition-all text-amber-800"
+              >
+                🧪 Transfer Test
+              </a>
+
+              {/* API Test Navigation Link */}
+              <a
+                href="/api-test"
+                className="bg-amber-100 bg-opacity-80 border border-amber-300 rounded-full px-4 py-2 text-sm font-medium hover:bg-amber-200 transition-all text-amber-800"
+              >
+                🔌 API Test
+              </a>
+
+              {/* Token Unlock Navigation Link */}
+              <a
+                href="/token-unlock"
+                className="bg-amber-100 bg-opacity-80 border border-amber-300 rounded-full px-4 py-2 text-sm font-medium hover:bg-amber-200 transition-all text-amber-800"
+              >
+                🔓 Token Unlock
+              </a>
+            </>
+          )}
           {process.env.URL && (
             <a
               className="bg-base-300 bg-opacity-20 rounded-full p-2"
@@ -115,7 +174,7 @@ export function Header() {
         </div>
         {/* Added a wrapper div with margin-left to create more space */}
         <div className="ml-2 mt-2">
-          <HeaderRightArea />
+          <HeaderRightArea devMode={devMode} setDevMode={handleDevModeChange} />
         </div>
       </div>
       

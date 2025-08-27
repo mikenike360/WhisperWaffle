@@ -97,7 +97,7 @@ npm run dev
 
 ### **Program Constants**
 ```leo
-const TOKEN_ID: field = 987654321987654321field; // Change for mainnet
+const TOKEN_ID: field = 42069187360field; // Change for mainnet
 const SWAP_FEE: u16 = 30u16;                    // 0.3%
 const PROTOCOL_FEE: u16 = 5u16;                 // 0.05%
 const MIN_LIQUIDITY: u128 = 1000000u128;        // Minimum pool size

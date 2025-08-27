@@ -46,7 +46,7 @@ const MainPage: NextPageWithLayout = () => {
           <div className="mb-8">
             <div className="flex items-center justify-center gap-4 mb-4">
               <img src={randomImages.header.src} alt={randomImages.header.alt} className="w-20 h-20 object-contain" />
-              <img src="/logo.png" alt="WhisperWaffle Logo" className="h-32 md:h-40 lg:h-48 object-contain" />
+              <img src="/logo.png" alt="WhisperWaffle Logo" className="h-48 md:h-64 lg:h-72 object-contain" />
               <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-20 h-20 object-contain" />
             </div>
             <p className="text-xl md:text-2xl text-primary-content/90 max-w-3xl mx-auto leading-relaxed">

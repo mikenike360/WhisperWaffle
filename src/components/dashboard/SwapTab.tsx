@@ -1,11 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
-import {
-  calculateSwapOutput,
-  calculatePriceImpact,
-} from '@/utils';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
+import { swapWaleoForToken, swapTokenForWaleo, getWrappedSwapQuote } from '@/utils/wrappedSwapExecutor';
 
 // Types
 type Token = {
@@ -16,25 +13,13 @@ type Token = {
   icon?: string;
 };
 
-type Pool = {
-  a: string;
-  b: string;
-  reserveA: bigint;
-  reserveB: bigint;
-  feeBps: number;
-};
-
 // Token list
 const TOKENS: Token[] = [
-  { symbol: 'ALEO', name: 'Aleo', decimals: 9, icon: '/token-icons/aleo.svg' },
-  { symbol: 'USDC', name: 'Custom Token (Test)', decimals: 6, icon: '/token-icons/usdc.svg' },
+  { symbol: 'WALEO', name: 'Wrapped ALEO', decimals: 6, icon: '/token-icons/aleo.svg' },
+  { symbol: 'WUSDC', name: 'Waffle USDC', decimals: 6, icon: '/token-icons/usdc.svg' },
 ];
 
-// Mock balances
-const mockBalances: Record<string, string> = {
-  ALEO: '1234.56789',
-  USDC: '1001.00', // Your minted custom tokens
-};
+
 
 // Helper functions
 const toAtomic = (amt: string, decimals: number): bigint => {
@@ -64,6 +49,8 @@ const fmtNumber = (n: number | string): string => {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+
+
 // Token Option Component
 const TokenOption: React.FC<{ token: Token }> = ({ token }) => (
   <div className="flex items-center gap-2">
@@ -75,7 +62,11 @@ const TokenOption: React.FC<{ token: Token }> = ({ token }) => (
   </div>
 );
 
-const SwapTab: React.FC = () => {
+interface SwapTabProps {
+  refreshPoolData: () => Promise<void>;
+}
+
+const SwapTab: React.FC<SwapTabProps> = ({ refreshPoolData }) => {
   const { publicKey, wallet } = useWallet();
   const [fromToken, setFromToken] = useState<Token>(TOKENS[0]);
   const [toToken, setToToken] = useState<Token>(TOKENS[1]);
@@ -83,49 +74,38 @@ const SwapTab: React.FC = () => {
   const [toAmount, setToAmount] = useState('');
 
   // Hooks
-  const { poolData, loading: poolLoading, error: poolError, refreshPoolData } = usePoolData();
+  const { poolData, loading: poolLoading, error: poolError } = usePoolData();
   const { balances, loading: balancesLoading, error: balancesError, refreshBalances } = useUserBalances();
 
-  // Dynamic pools
-  const pools = useMemo(() => {
-    if (!poolData) return [];
-    
-    return [
-      {
-        a: 'ALEO',
-        b: 'USDC',
-        reserveA: BigInt(poolData.ra || 0),
-        reserveB: BigInt(poolData.rb || 0),
-        feeBps: 25, // 0.25%
-      }
-    ];
-  }, [poolData]);
-
-  // Quote calculation
+  // Quote calculation using fixed exchange rate (4 wALEO = 1 wUSDC)
   const quote = useMemo(() => {
-    if (!fromAmount || !pools.length) return null;
+    if (!fromAmount || Number(fromAmount) <= 0) return null;
     
     try {
-      const pool = pools[0];
-      const amountIn = Number(toAtomic(fromAmount, fromToken.decimals));
-      const result = calculateSwapOutput(amountIn, Number(pool.reserveA), Number(pool.reserveB));
+      const amountIn = Number(fromAmount);
+      const swapQuote = getWrappedSwapQuote(amountIn, fromToken.symbol as 'WALEO' | 'WUSDC');
+      
+      if (swapQuote.amountOut <= 0) return null;
       
       return {
-        amountOut: fromAtomic(BigInt(result), toToken.decimals),
-        priceImpactPct: calculatePriceImpact(amountIn, Number(pool.reserveA)),
-        feePct: (pool.feeBps / 10000) * 100,
-        route: [fromToken.symbol, toToken.symbol],
+        amountOut: swapQuote.amountOut.toFixed(6),
+        exchangeRate: swapQuote.exchangeRate,
+        priceImpactPct: 0, // No price impact with fixed rate
+        feePct: 0, // No fees with fixed rate
+        route: [fromToken.symbol, toToken.symbol]
       };
     } catch (error) {
       console.error('Quote calculation error:', error);
       return null;
     }
-  }, [fromAmount, fromToken, toToken, pools]);
+  }, [fromAmount, fromToken, toToken]);
 
   // Effects
   useEffect(() => {
     if (quote) {
       setToAmount(quote.amountOut);
+    } else {
+      setToAmount('');
     }
   }, [quote]);
 
@@ -144,23 +124,73 @@ const SwapTab: React.FC = () => {
     setFromAmount(String(max));
   }, [fromToken.symbol]);
 
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [swapStatus, setSwapStatus] = useState<string>('');
+
   const handleSwap = useCallback(async () => {
     if (!publicKey || !wallet) return;
     
     try {
-      // Implementation for swap
-      console.log('Swap initiated:', { fromToken, toToken, fromAmount, toAmount });
+      setIsSwapping(true);
+      setSwapStatus('Preparing swap...');
+      
+      const amountIn = Number(fromAmount);
+      if (amountIn <= 0) throw new Error('Invalid input amount');
+      
+      if (fromToken.symbol === 'WALEO' && toToken.symbol === 'WUSDC') {
+        // WALEO → WUSDC
+        setSwapStatus('Executing WALEO to WUSDC swap...');
+        const minWUSDCOut = Number(toAmount) * 0.995; // 0.5% slippage tolerance
+        
+        // Convert to smallest units (6 decimals for both tokens)
+        const waleoAmount = Math.floor(amountIn * 1000000);
+        const minWUSDCOutAmount = Math.floor(minWUSDCOut * 1000000);
+        
+        const success = await swapWaleoForToken(wallet, waleoAmount, minWUSDCOutAmount);
+        if (success) {
+          setSwapStatus('Swap completed successfully!');
+        } else {
+          throw new Error('Swap failed');
+        }
+        
+      } else if (fromToken.symbol === 'WUSDC' && toToken.symbol === 'WALEO') {
+        // WUSDC → WALEO
+        setSwapStatus('Executing WUSDC to WALEO swap...');
+        const minWALEOOut = Number(toAmount) * 0.995; // 0.5% slippage tolerance
+        
+        // Convert to smallest units (6 decimals for both tokens)
+        const wusdcAmount = Math.floor(amountIn * 1000000);
+        const minWALEOOutAmount = Math.floor(minWALEOOut * 1000000);
+        
+        const success = await swapTokenForWaleo(wallet, wusdcAmount, minWALEOOutAmount);
+        if (success) {
+          setSwapStatus('Swap completed successfully!');
+        } else {
+          throw new Error('Swap failed');
+        }
+        
+      } else {
+        throw new Error('Invalid token pair for swap');
+      }
+      
+      // Refresh balances after successful swap
+      await refreshBalances();
+      await refreshPoolData();
+      
     } catch (error) {
       console.error('Swap error:', error);
+      setSwapStatus(`Swap failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSwapping(false);
     }
-  }, [publicKey, wallet, fromToken, toToken, fromAmount, toAmount]);
+  }, [publicKey, wallet, fromToken, toToken, fromAmount, toAmount, refreshBalances, refreshPoolData]);
 
   // Helper function
   const getBalance = (symbol: string): number => {
     if (balances && balances[symbol as keyof typeof balances]) {
       return parseFloat(balances[symbol as keyof typeof balances]);
     }
-    return parseFloat(mockBalances[symbol] || '0');
+    return 0; // Remove mock balances, use real data only
   };
 
   // Computed values
@@ -171,23 +201,22 @@ const SwapTab: React.FC = () => {
   const minReceived = useMemo(() => {
     if (!quote) return '-';
     const out = Number(quote.amountOut || '0');
-    const min = out * 0.995; // 0.5% slippage
+    const min = out * 0.995; // 0.5% slippage tolerance
     return fmtNumber(min);
   }, [quote]);
 
-  const priceImpactStr = useMemo(() => quote ? `${quote.priceImpactPct.toFixed(2)}%` : '-', [quote]);
+  const priceImpactStr = useMemo(() => '0.00%', []); // Fixed rate = no price impact
   const gasEstimate = useMemo(() => '~0.001 ALEO', []);
   const priceDisplay = useMemo(() => {
-    if (!quote || !fromAmount) return '-';
-    const price = Number(quote.amountOut) / Number(fromAmount);
-    return `1 ${fromToken.symbol} = ${price.toFixed(6)} ${toToken.symbol}`;
-  }, [quote, fromAmount, fromToken.symbol, toToken.symbol]);
+    if (!quote) return '-';
+    return quote.exchangeRate;
+  }, [quote]);
 
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">Swap Tokens</h2>
-        
+        <p className="text-gray-600">Fixed Exchange Rate: 4 wALEO = 1 wUSDC</p>
       </div>
 
       {/* From */}
@@ -212,7 +241,7 @@ const SwapTab: React.FC = () => {
           <button className="text-sm text-blue-600 hover:underline font-medium" onClick={setMax}>
             MAX
           </button>
-          <div className="text-xs text-gray-500">Fee: ~{quote ? `${quote.feePct.toFixed(2)}%` : '-'}</div>
+          <div className="text-xs text-gray-500">Fixed Rate: No fees</div>
         </div>
       </div>
 
@@ -240,7 +269,7 @@ const SwapTab: React.FC = () => {
           <input
             readOnly
             value={loadingQuote ? '' : (toAmount || '')}
-            placeholder={loadingQuote ? 'Fetching quote…' : '0.0'}
+            placeholder={loadingQuote ? 'Calculating...' : '0.0'}
             className="border rounded-lg px-4 py-3 w-40 text-right bg-gray-100 text-lg font-medium"
           />
         </div>
@@ -249,7 +278,7 @@ const SwapTab: React.FC = () => {
       {/* Swap Details */}
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div className="p-3 bg-gray-50 rounded-lg">
-          <span className="text-gray-600">Price:</span>
+          <span className="text-gray-600">Exchange Rate:</span>
           <span className="ml-2 font-medium">{priceDisplay}</span>
         </div>
         <div className="p-3 bg-gray-50 rounded-lg">
@@ -274,16 +303,40 @@ const SwapTab: React.FC = () => {
             <span className="text-blue-700">Estimated gas:</span>
             <span className="font-medium">{gasEstimate}</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-blue-700">Rate type:</span>
+            <span className="font-medium text-green-600">Fixed Exchange Rate</span>
+          </div>
+        </div>
+        
+        <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+          <div className="text-xs text-blue-800">
+            <strong>💡 Note:</strong> This swap uses wrapped tokens (wALEO ↔ wUSDC). 
+            Use the Deposit tab to convert your ALEO to wALEO first. Swaps are now fully functional!
+          </div>
         </div>
       </div>
+
+      {/* Swap Status */}
+      {swapStatus && (
+        <div className={`p-4 rounded-xl border ${
+          swapStatus.includes('failed') || swapStatus.includes('error') 
+            ? 'bg-red-50 border-red-200 text-red-800' 
+            : swapStatus.includes('completed') 
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-blue-50 border-blue-200 text-blue-800'
+        }`}>
+          <div className="text-center font-medium">{swapStatus}</div>
+        </div>
+      )}
 
       {/* Swap Button */}
       <button
         onClick={handleSwap}
-        disabled={!canSwap || loadingQuote}
+        disabled={!canSwap || loadingQuote || isSwapping}
         className="w-full py-4 px-6 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg"
       >
-        {loadingQuote ? 'Fetching Quote...' : canSwap ? 'Swap Tokens' : 'Enter Amount'}
+        {isSwapping ? 'Swapping...' : loadingQuote ? 'Calculating...' : canSwap ? 'Swap Tokens' : 'Enter Amount'}
       </button>
     </div>
   );

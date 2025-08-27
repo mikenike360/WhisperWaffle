@@ -1,7 +1,7 @@
 # Custom Token Configuration Guide
 
 ## Current Setup (Testnet)
-Your WhisperWaffle DEX is currently configured to use your custom token `987654321987654321field` instead of USDC for testing purposes.
+Your WhisperWaffle DEX is currently configured to use your custom token `42069187360field` instead of USDC for testing purposes.
 
 ### What's Been Updated:
 - ✅ **Balance Display**: Shows "Custom Token" instead of "USDC"
@@ -40,7 +40,7 @@ Change all "Custom Token" references back to "USDC" in:
 In `program/src/main.leo`, change:
 ```leo
 // From (Testnet)
-const TOKEN_ID: field = 987654321987654321field;
+const TOKEN_ID: field = 42069187360field;
 
 // To (Mainnet)
 const TOKEN_ID: field = [ACTUAL_VUSDC_TOKEN_ID];
@@ -60,7 +60,7 @@ const TOKEN_ID: field = [ACTUAL_VUSDC_TOKEN_ID];
 ✅ **Real Data**: Test with actual blockchain transactions  
 
 ## Current Status:
-- **🟢 Testnet**: Using custom token `987654321987654321field`
+- **🟢 Testnet**: Using custom token `42069187360field`
 - **🔵 Mainnet**: Ready to switch to real vUSDC
 - **🧪 Testing**: Full DEX functionality available for testing
 - **🚀 Production**: Easy transition when ready
