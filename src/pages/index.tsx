@@ -7,12 +7,12 @@ import { WalletNotConnectedError } from '@demox-labs/aleo-wallet-adapter-base';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useRandomImages } from '@/utils/useRandomImages';
-import dynamic from 'next/dynamic';
-
-const Spline = dynamic(() => import('@splinetool/react-spline'), {
-  ssr: false,
-  loading: () => <div className="w-full h-full bg-gradient-to-br from-primary via-primary-focus to-primary-content" />
-});
+// Temporarily disabled Spline due to build issues
+// import dynamic from 'next/dynamic';
+// const Spline = dynamic(() => import('@splinetool/react-spline'), {
+//   ssr: false,
+//   loading: () => <div className="w-full h-full bg-gradient-to-br from-primary via-primary-focus to-primary-content" />
+// });
 
 const MainPage: NextPageWithLayout = () => {
   const { publicKey } = useWallet();
@@ -46,14 +46,12 @@ const MainPage: NextPageWithLayout = () => {
       />
 
       <div className="min-h-screen bg-gradient-to-br from-primary via-primary-focus to-primary-content relative">
-        {/* Spline Background */}
-        <div className="absolute inset-0 z-0">
-          <Spline
-            scene="https://prod.spline.design/BN0PKZUnejPrAZx9/scene.splinecode"
-            style={{ width: '100%', height: '100%' }}
-            onError={(error) => {
-              console.warn('Spline failed to load:', error);
-            }}
+        {/* Background Image */}
+        <div className="absolute inset-0 z-0 flex items-center justify-center -mt-16">
+          <img 
+            src="/swap_in_silence.png" 
+            alt="Swap in Silence Background" 
+            className="w-64 h-64 object-contain"
           />
         </div>
         
@@ -65,49 +63,49 @@ const MainPage: NextPageWithLayout = () => {
               <img src="/logo.png" alt="WhisperWaffle Logo" className="h-64 md:h-80 lg:h-96 object-contain" />
             </div>
             <div className="text-center mb-8 mt-64">
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4 leading-tight">
+              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-primary-content mb-4 leading-tight">
                 The Sweetest DEX on Aleo
               </h2>
-              <p className="text-lg md:text-xl lg:text-2xl text-gray-700 max-w-2xl mx-auto leading-relaxed font-medium">
+              <p className="text-lg md:text-xl lg:text-2xl text-primary-content/80 max-w-2xl mx-auto leading-relaxed font-medium">
                 Swap in Sweet Silence
               </p>
             </div>
           </div>
 
-          {/* Single Character Showcase */}
-          {/* <div className="mb-16 max-w-2xl w-full">
-            <div className="text-center">
-              <div className={`bg-white/10 backdrop-blur rounded-2xl p-8 mb-4 border border-white/20 transition-all duration-300 ${isRandomizing ? 'animate-pulse scale-105' : ''}`}>
-                <img 
-                  src={randomImages.background2.src} 
-                  alt={randomImages.background2.alt} 
-                  className="w-40 h-40 mx-auto mb-6 object-contain"
-                />
-                <h3 className="text-2xl font-semibold text-white mb-3">{randomImages.background2.name}</h3>
-                <p className="text-white/80 text-lg">Your trusty DeFi companion</p>
-              </div> */}
-              
-              {/* Refresh Button */}
-              {/* <button
-                onClick={refreshImages}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-white/90 text-sm hover:bg-white/30 transition-all duration-200 hover:scale-105 active:scale-95"
-                disabled={isRandomizing}
-              >
-                <span className="text-lg">🔄</span>
-                <span>New Character</span>
-              </button>
-            </div>
-          </div> */}
-
-          {/* Randomizing Indicator */}
-          {/* {isRandomizing && (
-            <div className="mb-6 text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-white/90 text-sm">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                <span>🎲 Randomizing character...</span>
+                      {/* Single Character Showcase - Removed random images for cleaner look */}
+            {/* <div className="mb-16 max-w-2xl w-full">
+              <div className="text-center">
+                <div className={`bg-white/10 backdrop-blur rounded-2xl p-8 mb-4 border border-white/20 transition-all duration-300 ${isRandomizing ? 'animate-pulse scale-105' : ''}`}>
+                  <img 
+                    src={randomImages.background2.src} 
+                    alt={randomImages.background2.alt} 
+                    className="w-40 h-40 mx-auto mb-6 object-contain"
+                  />
+                  <h3 className="text-2xl font-semibold text-white mb-3">{randomImages.background2.name}</h3>
+                  <p className="text-white/80 text-lg">Your trusty DeFi companion</p>
+                </div> */}
+                
+                {/* Refresh Button */}
+                {/* <button
+                  onClick={refreshImages}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-white/90 text-sm hover:bg-white/30 transition-all duration-200 hover:scale-105 active:scale-95"
+                  disabled={isRandomizing}
+                >
+                  <span className="text-lg">🔄</span>
+                  <span>New Character</span>
+                </button>
               </div>
-            </div>
-          )} */}
+            </div> */}
+
+                      {/* Randomizing Indicator - Removed since random images are disabled */}
+            {/* {isRandomizing && (
+              <div className="mb-6 text-center">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-white/90 text-sm">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span>🎲 Randomizing character...</span>
+                </div>
+              </div>
+            )} */}
 
 
 
@@ -119,7 +117,7 @@ const MainPage: NextPageWithLayout = () => {
                   onClick={handleSwapClick}
                   className="btn btn-primary btn-lg px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
                 >
-                  🚀 Start Swapping
+                  🧇 Start Swapping
                 </Button>
 
               </>
@@ -136,48 +134,46 @@ const MainPage: NextPageWithLayout = () => {
    
 
           {/* Quick Links */}
-          <div className="mt-12 text-center">
-            <p className="text-gray-700 mb-4 font-medium">Ready to explore?</p>
+          {/* <div className="mt-12 text-center">
+            <p className="text-primary-content/80 mb-4 font-medium">Ready to explore?</p>
             <div className="flex flex-wrap justify-center gap-4 text-sm">
               <a 
                 href="/user-dashboard" 
-                className="text-gray-800 hover:text-blue-600 transition-colors duration-200 underline font-medium"
+                className="text-primary-content hover:text-primary-focus transition-colors duration-200 underline font-medium"
               >
                 Pool Management (Dashboard)
               </a>
-              <span className="text-gray-600">•</span>
+              <span className="text-primary-content/60">•</span>
               <a 
                 href="/user-dashboard" 
-                className="text-gray-800 hover:text-blue-600 transition-colors duration-200 underline font-medium"
+                className="text-primary-content hover:text-primary-focus transition-colors duration-200 underline font-medium"
               >
                 User Dashboard
               </a>
-              <span className="text-gray-600">•</span>
+              <span className="text-primary-content/60">•</span>
               <a 
                 href="/docs/SWAP_UTILITIES.md" 
-                className="text-gray-800 hover:text-blue-600 transition-colors duration-200 underline font-medium"
+                className="text-primary-content hover:text-primary-focus transition-colors duration-200 underline font-medium"
               >
                 Documentation
               </a>
             </div>
-          </div>
+          </div> */}
         </div>
 
-        {/* Minimal Static Waffles */}
-        <div className="fixed inset-0 pointer-events-none z-30">
-          {/* Corner waffles only */}
-          <div className="absolute top-10 left-10 text-3xl opacity-20">🧇</div>
-          <div className="absolute top-10 right-10 text-3xl opacity-20">🧇</div>
-          <div className="absolute bottom-10 left-10 text-3xl opacity-20">🧇</div>
-          <div className="absolute bottom-10 right-10 text-3xl opacity-20">🧇</div>
-        </div>
+        {/* Minimal Static Waffles - commented out for now */}
+        {/* <div className="fixed inset-0 pointer-events-none z-30">
+          <div className="absolute top-1/4 left-1/4 text-3xl opacity-20">🧇</div>
+          <div className="absolute top-1/4 right-1/4 text-3xl opacity-20">🧇</div>
+          <div className="absolute bottom-1/4 left-1/4 text-3xl opacity-20">🧇</div>
+          <div className="absolute bottom-1/4 right-1/4 text-3xl opacity-20">🧇</div>
+        </div> */}
         
-        {/* Minimal Static Syrup Drops */}
-        <div className="fixed inset-0 pointer-events-none z-25">
-          {/* Just a few syrup drops */}
+        {/* Minimal Static Syrup Drops - removed for cleaner look */}
+        {/* <div className="fixed inset-0 pointer-events-none z-25">
           <div className="absolute top-5 left-1/4 text-lg opacity-30">🍁</div>
           <div className="absolute bottom-5 right-1/4 text-lg opacity-30">🍁</div>
-        </div>
+        </div> */}
       </div>
     </>
   );

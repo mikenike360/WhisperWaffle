@@ -3,7 +3,8 @@ import { NextSeo } from 'next-seo';
 import Layout from '@/layouts/_layout';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import React, { useCallback, useState, useEffect } from 'react';
-import { useRandomImages } from '@/utils/useRandomImages';
+// Removed random images import for cleaner look
+// import { useRandomImages } from '@/utils/useRandomImages';
 import { SwapTab, PoolTab, BalancesTab, SettingsTab } from '@/components/dashboard';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
@@ -15,7 +16,8 @@ import { CURRENT_NETWORK } from '@/types';
 const SwapPage: NextPageWithLayout = () => {
   const { wallet, publicKey } = useWallet();
   const [activeTab, setActiveTab] = useState<'swap' | 'pool' | 'balances' | 'settings' | 'deposit'>('swap');
-  const { randomImages, isClient } = useRandomImages();
+  // Removed random images usage for cleaner look
+  // const { randomImages, isClient } = useRandomImages();
   // Tabs managed here; tab content handled by components
   const sideImage =
     activeTab === 'pool'
@@ -458,7 +460,7 @@ const SwapPage: NextPageWithLayout = () => {
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
-                      🔄 Swap
+                      🧇 Swap
                     </button>
                     <button
                       onClick={() => setActiveTab('pool')}
@@ -999,8 +1001,8 @@ const SwapPage: NextPageWithLayout = () => {
               <div className="absolute top-3/4 right-10 text-xl opacity-15">🧇</div>
             </div>
             
-            {/* Character Images - Restored */}
-            <div className="absolute inset-0 pointer-events-none z-5">
+            {/* Character Images - Removed random images for cleaner look */}
+            {/* <div className="absolute inset-0 pointer-events-none z-5">
               <div className="absolute top-10 left-5 opacity-20">
                 <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-16 h-16 object-contain" />
               </div>
@@ -1010,7 +1012,7 @@ const SwapPage: NextPageWithLayout = () => {
               <div className="absolute top-2/3 left-5 opacity-20">
                 <img src={randomImages.background3.src} alt={randomImages.background3.alt} className="w-16 h-16 object-contain" />
               </div>
-            </div>
+            </div> */}
             
             {/* Static Syrup Drops - Restored */}
             <div className="absolute inset-0 pointer-events-none z-5">
