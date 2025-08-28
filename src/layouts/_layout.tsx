@@ -11,10 +11,12 @@ import Footer from '@/components/ui/Footer';
 require('@demox-labs/aleo-wallet-adapter-reactui/dist/styles.css');
 
 // Define the list of DaisyUI themes you want to offer
+
+
 const themes = [
   "light",
   "dark",
-  "cyberpunk",
+  "cyberpunk", // This will show as "Waffle" in the dropdown
 ];
 
 // ThemeSelector component using Next Themes
@@ -25,19 +27,23 @@ function ThemeSelector() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    // Set cyberpunk as default theme if no theme is set
+    if (!theme) {
+      setTheme('cyberpunk');
+    }
+  }, [theme, setTheme]);
 
   if (!mounted) return null;
 
   return (
     <select
-      value={theme}
+      value={theme || 'cyberpunk'}
       onChange={(e) => setTheme(e.target.value)}
       className="select select-bordered max-w-xs"
     >
       {themes.map((t) => (
         <option key={t} value={t}>
-          {t.charAt(0).toUpperCase() + t.slice(1)}
+          {t === 'cyberpunk' ? 'Waffle' : t.charAt(0).toUpperCase() + t.slice(1)}
         </option>
       ))}
     </select>
