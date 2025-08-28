@@ -51,4 +51,4 @@ MIT License - see LICENSE file for details.
 
 **WhisperWaffle MVP** - Demonstrating DeFi on Aleo for Code Sprint 4.0! 🚀🧇
 
-*This MVP showcases core DeFi functionality with public token trading. Future versions will include full privacy features and advanced DeFi mechanics.*
+*This MVP showcases core DeFi functionality with public token trading. Future versions will include full privacy features, advanced DeFi mechanics and more waffles!*
