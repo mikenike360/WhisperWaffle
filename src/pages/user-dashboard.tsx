@@ -442,11 +442,11 @@ const SwapPage: NextPageWithLayout = () => {
               <div className="grid md:grid-cols-5">
                 <div className="md:col-span-3 p-6 text-gray-800">
                   {/* Header */}
-                  <div className="flex items-center justify-center mb-6 w-full">
+                  {/* <div className="flex items-center justify-center mb-6 w-full">
                     <div className="text-center">
                       <img src="/logo.png" alt="WhisperWaffle Logo" className="h-32 md:h-48 lg:h-72 object-contain mx-auto" />
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* Tab Navigation */}
                   <div className="flex border-b border-gray-200 mb-6">
@@ -478,7 +478,7 @@ const SwapPage: NextPageWithLayout = () => {
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
-                      💸 Deposit
+                      💸 Wrap Aleo
                     </button>
                     <button
                       onClick={() => setActiveTab('balances')}
@@ -604,7 +604,7 @@ const SwapPage: NextPageWithLayout = () => {
                                 {isCheckingApprovals ? 'Checking...' : 'Check Approval Status'}
                               </button>
 
-                              <button
+                              {/* <button
                                 onClick={() => {
                                   refreshBalances();
                                   setTimeout(() => checkApprovals(), 1000);
@@ -612,14 +612,13 @@ const SwapPage: NextPageWithLayout = () => {
                                 className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-blue-600 transition-colors"
                               >
                                 Refresh Balances & Check Approvals
-                              </button>
+                              </button> */}
                             </div>
 
                             {/* Progress Indicator */}
                             <div className="mt-4">
                               <div className="flex justify-between text-sm text-gray-600 mb-1">
 
-                              <p className="text-xs text-gray-500"> Approval Status currently not working. Check transactions manually.</p>
                                 <span>Approval Progress</span>
                                 
                                 <span>{waleoApproved && wusdcApproved ? '2/2' : `${(waleoApproved ? 1 : 0) + (wusdcApproved ? 1 : 0)}/2`}</span>

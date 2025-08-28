@@ -15,9 +15,9 @@ async function bhp256Hash(tokenId: string, account: string, spender: string): Pr
     // Import the WASM module using require
     const { Hasher } = require('@doko-js/wasm');
     
-    // Try the same order as balances: {account, token_id, spender}
-    // This matches the pattern from your balance API
-    const leoStruct = `{account: ${account}, token_id: ${tokenId}, spender: ${spender}}`;
+    // Use the correct order for Allowance struct: {account, spender, token_id}
+    // This matches the actual struct definition in token_registry.aleo
+    const leoStruct = `{account: ${account}, spender: ${spender}, token_id: ${tokenId}}`;
     console.log('[API] Leo struct input for allowance:', leoStruct);
     
     const hash = Hasher.hash('bhp256', leoStruct, 'field', 'testnet');

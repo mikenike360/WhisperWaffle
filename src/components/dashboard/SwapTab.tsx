@@ -216,8 +216,6 @@ const SwapTab: React.FC<SwapTabProps> = ({ refreshPoolData }) => {
     <div className="space-y-6">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">Swap Tokens</h2>
-        <p className="text-gray-600">Before swapping, you must allow the swap contract to swap your tokens using the Token Approvals tab</p>
-        <p className="text-gray-600">Fixed Exchange Rate: 4 wALEO = 1 wUSDC</p>
       </div>
 
       {/* From */}
@@ -235,7 +233,7 @@ const SwapTab: React.FC<SwapTabProps> = ({ refreshPoolData }) => {
             placeholder="0.0"
             value={fromAmount}
             onChange={e => setFromAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-            className="border rounded-lg px-4 py-3 w-40 text-right text-lg font-medium"
+            className="border rounded-lg px-4 py-3 w-40 text-right text-lg font-medium bg-white"
           />
         </div>
         <div className="mt-3 flex justify-between items-center">
@@ -289,7 +287,7 @@ const SwapTab: React.FC<SwapTabProps> = ({ refreshPoolData }) => {
       </div>
 
       {/* Transaction Details */}
-      <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+      {/* <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
         <h3 className="font-medium text-blue-800 mb-3">Transaction Details</h3>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
@@ -308,15 +306,15 @@ const SwapTab: React.FC<SwapTabProps> = ({ refreshPoolData }) => {
             <span className="text-blue-700">Rate type:</span>
             <span className="font-medium text-green-600">Fixed Exchange Rate</span>
           </div>
-        </div>
+        </div> */}
         
-        <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+        {/* <div className="mt-3 p-3 bg-blue-100 rounded-lg">
           <div className="text-xs text-blue-800">
             <strong>💡 Note:</strong> This swap uses wrapped tokens (wALEO ↔ wUSDC). 
             Use the Deposit tab to convert your ALEO to wALEO first. Swaps are now fully functional!
           </div>
-        </div>
-      </div>
+        </div> */}
+      {/* </div> */}
 
       {/* Swap Status */}
       {swapStatus && (
