@@ -62,14 +62,6 @@
 - **wUSDC Token ID**: `42069187360666field`
 - **Pool ID**: Fixed pool ID (1field) for initial deployment
 
-## 🔧 **Configuration**
-
-- **wALEO Token ID**: `68744147421264673966385360field`
-- **wUSDC Token ID**: `42069187360666field`
-- **Exchange Rate**: 4:1 (4 wALEO = 1 wUSDC)
-- **Swap Fee**: 0.3%
-- **Network**: Aleo Testnet Beta
-
 ## 📱 **User Interface**
 
 - **Dashboard**: Swap interface and liquidity management
