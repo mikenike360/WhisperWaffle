@@ -431,8 +431,7 @@ const SwapPage: NextPageWithLayout = () => {
   }, [publicKey]); // Only depend on publicKey to run once when wallet connects
 
   return (
-    <Layout>
-      <div className="min-h-screen bg-gradient-to-br from-primary via-primary-focus to-primary-content relative">
+    <div className="min-h-screen bg-gradient-to-br from-primary via-primary-focus to-primary-content relative pb-20 pt-4 sm:pt-12">
         {/* Dashboard content - no more approval overlay blocking access */}
 
         {/* Existing Dashboard Content - PRESERVED EXACTLY AS IS */}
@@ -441,10 +440,12 @@ const SwapPage: NextPageWithLayout = () => {
           <div className="flex flex-col items-center justify-center w-full">
             <div className="w-full max-w-4xl rounded-2xl shadow-lg bg-amber-100/80 backdrop-blur-sm border border-amber-200 overflow-hidden">
               <div className="grid md:grid-cols-5">
-                <div className="md:col-span-3 p-6 text-gray-900">
+                <div className="md:col-span-3 p-6 text-gray-800">
                   {/* Header */}
-                  <div className="flex items-center justify-center mb-6">
-                    <img src="/logo.png" alt="WhisperWaffle Logo" className="h-32 md:h-48 lg:h-72 object-contain" />
+                  <div className="flex items-center justify-center mb-6 w-full">
+                    <div className="text-center">
+                      <img src="/logo.png" alt="WhisperWaffle Logo" className="h-32 md:h-48 lg:h-72 object-contain mx-auto" />
+                    </div>
                   </div>
 
                   {/* Tab Navigation */}
@@ -505,7 +506,7 @@ const SwapPage: NextPageWithLayout = () => {
                   {/* Tab Content */}
                   <div className="min-h-[400px]">
                     {activeTab === 'swap' && (
-                      <div className="p-6 border rounded-xl bg-white/80">
+                      <div className="p-6 border rounded-xl bg-white/90 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-xl font-semibold text-gray-800">Token Swap</h3>
                         </div>
@@ -617,7 +618,10 @@ const SwapPage: NextPageWithLayout = () => {
                             {/* Progress Indicator */}
                             <div className="mt-4">
                               <div className="flex justify-between text-sm text-gray-600 mb-1">
+
+                              <p className="text-xs text-gray-500"> Approval Status currently not working. Check transactions manually.</p>
                                 <span>Approval Progress</span>
+                                
                                 <span>{waleoApproved && wusdcApproved ? '2/2' : `${(waleoApproved ? 1 : 0) + (wusdcApproved ? 1 : 0)}/2`}</span>
                               </div>
                               <div className="w-full bg-gray-200 rounded-full h-2">
@@ -647,7 +651,7 @@ const SwapPage: NextPageWithLayout = () => {
                     {activeTab === 'pool' && (
                       <div className="grid grid-cols-1 gap-6">
                         {/* Pool Stats */}
-                        <div className="p-6 border rounded-xl bg-white/80">
+                        <div className="p-6 border rounded-xl bg-white/90 shadow-sm">
                           <div className="flex items-center justify-between mb-4">
                             <h3 className="text-xl font-semibold text-gray-800">Pool Overview</h3>
                             <button
@@ -713,7 +717,7 @@ const SwapPage: NextPageWithLayout = () => {
                                     placeholder="0.0"
                                     value={aleoAmount}
                                     onChange={(e) => handleAleoChange(e.target.value)}
-                                    className="flex-1 border rounded-lg px-3 py-2"
+                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     min="0"
                                     step="0.000001"
                                   />
@@ -735,7 +739,7 @@ const SwapPage: NextPageWithLayout = () => {
                                     placeholder="0.0"
                                     value={usdcAmount}
                                     onChange={(e) => handleUsdcChange(e.target.value)}
-                                    className="flex-1 border rounded-lg px-3 py-2"
+                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     min="0"
                                     step="0.01"
                                   />
@@ -832,7 +836,7 @@ const SwapPage: NextPageWithLayout = () => {
                     )}
                     {activeTab === 'balances' && <BalancesTab />}
                     {activeTab === 'deposit' && (
-                      <div className="p-6 border rounded-xl bg-white/80">
+                      <div className="p-6 border rounded-xl bg-white/90 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-xl font-semibold text-gray-800">Wrapped Token Operations</h3>
                         </div>
@@ -970,7 +974,7 @@ const SwapPage: NextPageWithLayout = () => {
 
                   </div>
                 </div>
-                <div className="hidden md:flex md:col-span-2 relative items-center justify-center">
+                <div className="hidden md:flex md:col-span-2 relative items-center justify-center" style={{ backgroundColor: 'transparent' }}>
                   <img
                     src={sideImage}
                     alt={
@@ -988,16 +992,16 @@ const SwapPage: NextPageWithLayout = () => {
               </div>
             </div>
             
-            {/* Static Waffles */}
-            <div className="fixed inset-0 pointer-events-none z-10">
+            {/* Static Waffles - Restored */}
+            <div className="absolute inset-0 pointer-events-none z-10">
               <div className="absolute top-20 left-10 text-2xl opacity-15">🧇</div>
               <div className="absolute top-40 right-20 text-xl opacity-15">🧇</div>
               <div className="absolute top-1/2 left-20 text-2xl opacity-15">🧇</div>
               <div className="absolute top-3/4 right-10 text-xl opacity-15">🧇</div>
             </div>
             
-            {/* Character Images */}
-            <div className="fixed inset-0 pointer-events-none z-5">
+            {/* Character Images - Restored */}
+            <div className="absolute inset-0 pointer-events-none z-5">
               <div className="absolute top-10 left-5 opacity-20">
                 <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-16 h-16 object-contain" />
               </div>
@@ -1009,8 +1013,8 @@ const SwapPage: NextPageWithLayout = () => {
               </div>
             </div>
             
-            {/* Static Syrup Drops */}
-            <div className="fixed inset-0 pointer-events-none z-5">
+            {/* Static Syrup Drops - Restored */}
+            <div className="absolute inset-0 pointer-events-none z-5">
               <div className="absolute top-0 left-1/4 text-lg opacity-30">🍁</div>
               <div className="absolute top-1/3 right-10 text-lg opacity-25">🍁</div>
               <div className="absolute top-2/3 left-10 text-lg opacity-25">🍁</div>
@@ -1018,7 +1022,6 @@ const SwapPage: NextPageWithLayout = () => {
           </div>
         </div>
       </div>
-    </Layout>
   );
 };
 

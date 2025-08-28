@@ -44,14 +44,17 @@ const MainPage: NextPageWithLayout = () => {
         <div className="relative z-20 flex flex-col items-center justify-center min-h-screen px-4 py-16 text-center">
           {/* Main Title */}
           <div className="mb-8">
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <img src={randomImages.header.src} alt={randomImages.header.alt} className="w-20 h-20 object-contain" />
-              <img src="/logo.png" alt="WhisperWaffle Logo" className="h-48 md:h-64 lg:h-72 object-contain" />
-              <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-20 h-20 object-contain" />
+            <div className="flex items-center justify-center mb-4">
+              <img src="/logo.png" alt="WhisperWaffle Logo" className="h-64 md:h-80 lg:h-96 object-contain" />
             </div>
-            <p className="text-xl md:text-2xl text-primary-content/90 max-w-3xl mx-auto leading-relaxed">
-            Swap in Syrupy Silence
-            </p>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
+                The Sweetest DEX on Aleo
+              </h2>
+              <p className="text-lg md:text-xl lg:text-2xl text-primary-content/80 max-w-2xl mx-auto leading-relaxed font-medium">
+                Swap in Syrupy Silence
+              </p>
+            </div>
           </div>
 
           {/* Single Character Showcase */}

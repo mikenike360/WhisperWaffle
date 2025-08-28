@@ -216,6 +216,7 @@ const SwapTab: React.FC<SwapTabProps> = ({ refreshPoolData }) => {
     <div className="space-y-6">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800 mb-2">Swap Tokens</h2>
+        <p className="text-gray-600">Before swapping, you must allow the swap contract to swap your tokens using the Token Approvals tab</p>
         <p className="text-gray-600">Fixed Exchange Rate: 4 wALEO = 1 wUSDC</p>
       </div>
 
