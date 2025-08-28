@@ -107,7 +107,7 @@ export function Header() {
             href="/user-dashboard"
             className="bg-base-300 bg-opacity-20 rounded-full px-4 py-2 text-sm font-medium hover:bg-opacity-30 transition-all"
           >
-            🧇 Dashboard
+            🧇 Swap
           </a>
 
           {/* Token Studio Navigation Link */}
@@ -143,7 +143,7 @@ export function Header() {
                 href="/token-unlock"
                 className="bg-amber-100 bg-opacity-80 border border-amber-300 rounded-full px-4 py-2 text-sm font-medium hover:bg-amber-200 transition-all text-amber-800"
               >
-                🔓 Token Unlock
+                🔓 Token Management
               </a>
             </>
           )}

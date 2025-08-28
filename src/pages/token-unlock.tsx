@@ -7,15 +7,28 @@ import Layout from '../layouts/_layout';
 // Constants matching the pattern from addLiquidity.ts
 const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 const CUSTOM_TOKEN_ID = '42069187360666field'; // Updated to correct wUSDC token ID
+const WALEO_TOKEN_ID = '68744147421264673966385360field'; // wALEO token ID
+const DEX_PROGRAM_ADDRESS = 'aleo1xyu6ndzryyelv4n4fg8vdpt87a6ud7zar5rsegjl6z'; // Your DEX program address
 
 const TokenUnlockPage: React.FC = () => {
   const { wallet, publicKey } = useWallet();
+  const [activeSubTab, setActiveSubTab] = useState<'unlock' | 'roles'>('unlock');
+  
+  // Unlock tokens state
   const [ownerAddress, setOwnerAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [authorizedUntil, setAuthorizedUntil] = useState('');
   const [transactionId, setTransactionId] = useState('');
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Roles management state
+  const [roleTokenId, setRoleTokenId] = useState(CUSTOM_TOKEN_ID); // Default to wUSDC
+  const [roleProgramAddress, setRoleProgramAddress] = useState(DEX_PROGRAM_ADDRESS);
+  const [roleType, setRoleType] = useState('1u8'); // MINTER_ROLE
+  const [roleTransactionId, setRoleTransactionId] = useState('');
+  const [roleStatus, setRoleStatus] = useState('');
+  const [isSettingRole, setIsSettingRole] = useState(false);
 
   const handleUnlock = async () => {
     if (!wallet || !publicKey) {
@@ -98,16 +111,96 @@ const TokenUnlockPage: React.FC = () => {
     return Math.floor(Date.now() / 1000) + 2592000; // 30 days in seconds
   };
 
+  const handleSetRole = async () => {
+    if (!wallet || !publicKey) {
+      setRoleStatus('Please connect your wallet first');
+      return;
+    }
+
+    if (!roleTokenId || !roleProgramAddress || !roleType) {
+      setRoleStatus('Please fill in all fields');
+      return;
+    }
+
+    setIsSettingRole(true);
+    setRoleStatus('Setting role...');
+
+    try {
+      // Helper to submit tx and wait for finalization (matching addLiquidity.ts pattern)
+      const sendAndWait = async (tx: any) => {
+        const id = await wallet.adapter.requestTransaction(tx);
+        if (!id) throw new Error('No transaction ID returned from wallet');
+        let status = await wallet.adapter.transactionStatus(id);
+        let attempts = 0;
+        while (status === 'Pending' && attempts < 60) {
+          await new Promise((r) => setTimeout(r, 1000));
+          status = await wallet.adapter.transactionStatus(id);
+          attempts++;
+        }
+        if (status !== 'Completed' && status !== 'Finalized') {
+          throw new Error(`Tx not completed: ${status}`);
+        }
+        return id;
+      };
+
+      const transaction = Transaction.createTransaction(
+        publicKey,
+        CURRENT_NETWORK,
+        TOKEN_REGISTRY_PROGRAM,
+        'set_role',
+        [roleTokenId, roleProgramAddress, roleType],
+        500000, // fee in microcredits (0.5 ALEO)
+        false
+      );
+
+      // Submit and wait using the same pattern as addLiquidity.ts
+      const txId = await sendAndWait(transaction);
+      setRoleTransactionId(txId);
+      setRoleStatus('✅ Role set successfully!');
+      setIsSettingRole(false);
+
+    } catch (error) {
+      console.error('Error setting role:', error);
+      setRoleStatus(`❌ Error: ${error.message || 'Unknown error occurred'}`);
+      setIsSettingRole(false);
+    }
+  };
+
   return (
     <Layout>
       <div className="w-full flex items-start justify-center p-6 pt-32">
         <div className="max-w-2xl w-full">
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8">
             <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
-              🔓 Token Unlock
+              🔓 Token Management
             </h1>
             
-            <div className="space-y-6">
+            {/* Sub-tabs: Unlock / Roles */}
+            <div className="flex border-b border-gray-200 mb-6">
+              <button
+                onClick={() => setActiveSubTab('unlock')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeSubTab === 'unlock'
+                    ? 'border-amber-500 text-amber-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                🔓 Unlock Tokens
+              </button>
+              <button
+                onClick={() => setActiveSubTab('roles')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeSubTab === 'roles'
+                    ? 'border-amber-500 text-amber-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                🔐 Manage Roles
+              </button>
+            </div>
+            
+            {activeSubTab === 'unlock' && (
+              <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Owner Address
@@ -213,6 +306,115 @@ const TokenUnlockPage: React.FC = () => {
                 </div>
               )}
             </div>
+            )}
+            
+            {activeSubTab === 'roles' && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-medium text-blue-800 mb-2">🔐 Role Management</h3>
+                  <p className="text-sm text-blue-700">
+                    Grant roles to programs for token operations. Use this to give your DEX program the MINTER_ROLE.
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Token ID
+                  </label>
+                  <select
+                    value={roleTokenId}
+                    onChange={(e) => setRoleTokenId(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    <option value={CUSTOM_TOKEN_ID}>wUSDC ({CUSTOM_TOKEN_ID})</option>
+                    <option value={WALEO_TOKEN_ID}>wALEO ({WALEO_TOKEN_ID})</option>
+                  </select>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Select the token to manage roles for
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Program Address
+                  </label>
+                  <input
+                    type="text"
+                    value={roleProgramAddress}
+                    onChange={(e) => setRoleProgramAddress(e.target.value)}
+                    placeholder="aleo1..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                                      <p className="text-sm text-gray-500 mt-1">
+                      The program address to grant the role to (default: {DEX_PROGRAM_ADDRESS})
+                    </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Role Type
+                  </label>
+                  <select
+                    value={roleType}
+                    onChange={(e) => setRoleType(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    <option value="1u8">MINTER_ROLE (1u8) - Can mint tokens</option>
+                    <option value="2u8">BURNER_ROLE (2u8) - Can burn tokens</option>
+                    <option value="3u8">TRANSFER_ROLE (3u8) - Can transfer tokens</option>
+                  </select>
+                  <p className="text-sm text-gray-500 mt-1">
+                    The role to grant to the program
+                  </p>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h3 className="font-medium text-amber-800 mb-2">ℹ️ How Role Management Works</h3>
+                  <ul className="text-sm text-amber-700 space-y-1">
+                    <li>• This calls <code className="bg-amber-100 px-1 rounded">set_role</code> on token_registry.aleo</li>
+                    <li>• <strong>MINTER_ROLE (1u8):</strong> Allows the program to mint new tokens</li>
+                    <li>• <strong>BURNER_ROLE (2u8):</strong> Allows the program to burn tokens</li>
+                    <li>• <strong>TRANSFER_ROLE (3u8):</strong> Allows the program to transfer tokens</li>
+                    <li>• You must be the token owner or have the appropriate role to grant roles</li>
+                  </ul>
+                </div>
+
+                <button
+                  onClick={handleSetRole}
+                  disabled={isSettingRole || !wallet || !publicKey}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+                >
+                  {isSettingRole ? '🔐 Setting Role...' : '🔐 Set Role'}
+                </button>
+
+                {roleStatus && (
+                  <div className={`p-4 rounded-lg ${
+                    roleStatus.includes('✅') ? 'bg-green-50 border border-green-200 text-green-800' :
+                    roleStatus.includes('❌') ? 'bg-red-50 border border-red-200 text-red-800' :
+                    'bg-blue-50 border border-blue-200 text-blue-800'
+                  }`}>
+                    <p className="font-medium">{roleStatus}</p>
+                  </div>
+                )}
+
+                {roleTransactionId && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 className="font-medium text-gray-800 mb-2">Transaction Details</h3>
+                    <p className="text-sm text-gray-600 mb-2">
+                      <strong>Transaction ID:</strong> {roleTransactionId}
+                    </p>
+                    <a
+                      href={`https://testnet.vxb.ai/transactionDetails/${roleTransactionId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700 underline text-sm"
+                    >
+                      View on Explorer →
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -12,7 +12,7 @@ import { addLiquidity } from '../utils/addLiquidity';
 const TokenPage: NextPageWithLayout = () => {
   const { wallet, publicKey } = useWallet();
   const { balances, loading: balancesLoading } = useUserBalances();
-  const [activeTab, setActiveTab] = useState('pool');
+  const [activeTab, setActiveTab] = useState('register');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const { randomImages } = useRandomImages();
@@ -200,13 +200,7 @@ const TokenPage: NextPageWithLayout = () => {
               <h1 className="text-3xl font-bold text-gray-800">Token Management</h1>
             </div>
             <div className="flex items-center gap-2">
-              <a
-                href="/user-dashboard"
-                className="text-sm px-4 py-2 rounded-lg border hover:bg-gray-50 text-blue-600 font-medium"
-                title="Go to Dashboard"
-              >
-                🧇 Dashboard
-              </a>
+
             </div>
           </div>
 
@@ -222,7 +216,7 @@ const TokenPage: NextPageWithLayout = () => {
           {/* Tab Navigation */}
           <div className="flex space-x-1 bg-white rounded-lg p-1 shadow-lg mb-8">
           {[
-            { id: 'pool', label: 'Pairing', icon: '🧇' },
+            // { id: 'pool', label: 'Pairing', icon: '🧇' }, // Hidden for now
             { id: 'register', label: 'Create Token', icon: '🏷️' },
             { id: 'mint', label: 'Mint Tokens', icon: '🪙' }
           ].map((tab) => (
@@ -243,8 +237,8 @@ const TokenPage: NextPageWithLayout = () => {
 
           {/* Tab Content */}
           <div className="bg-white rounded-lg shadow-lg p-6">
-          {/* Pool Management Tab */}
-          {activeTab === 'pool' && (
+          {/* Pool Management Tab - Hidden for now */}
+          {/* {activeTab === 'pool' && (
             <div>
               <h2 className="text-2xl font-bold mb-6"> Create Token Pair (BETA)</h2>
               <div className="space-y-4">

@@ -50,7 +50,7 @@ const MainPage: NextPageWithLayout = () => {
               <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-20 h-20 object-contain" />
             </div>
             <p className="text-xl md:text-2xl text-primary-content/90 max-w-3xl mx-auto leading-relaxed">
-              Where privacy meets DeFi. Advanced Aleo DEX with enterprise-grade safety features.
+            Swap in Syrupy Silence
             </p>
           </div>
 
@@ -79,32 +79,7 @@ const MainPage: NextPageWithLayout = () => {
             </div>
           )}
 
-          {/* Feature Highlights */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-5xl w-full">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-              <div className="text-3xl mb-3">🔄</div>
-              <h3 className="text-lg font-semibold text-primary-content mb-2">Advanced AMM</h3>
-              <p className="text-primary-content/80 text-sm">
-                Constant product formula with slippage protection and optimal routing
-              </p>
-            </div>
-            
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-              <div className="text-3xl mb-3">🛡️</div>
-              <h3 className="text-lg font-semibold text-primary-content mb-2">Enhanced Safety</h3>
-              <p className="text-primary-content/80 text-sm">
-                Input validation, overflow protection, and state verification
-              </p>
-            </div>
-            
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-              <div className="text-3xl mb-3">🔐</div>
-              <h3 className="text-lg font-semibold text-primary-content mb-2">Privacy First</h3>
-              <p className="text-primary-content/80 text-sm">
-                Built on Aleo for maximum privacy and zero-knowledge proofs
-              </p>
-            </div>
-          </div>
+
 
           {/* Action Buttons */}
           <div className="flex flex-col items-center space-y-4 sm:flex-row sm:space-x-6 sm:space-y-0 mb-8">
