@@ -3,6 +3,8 @@
 
 ![WhisperWaffle Logo](public/logo.png)
 
+👉 **Live Demo:** [WhisperWaffle DEX on Vercel](https://whisper-waffle.vercel.app)  
+
 **WhisperWaffle** is a **Minimum Viable Product (MVP)** built for the **Aleo Code Sprint 4.0**, demonstrating core DeFi functionality on the Aleo blockchain for those with a sweet tooth.  This MVP showcases the potential of building decentralized exchanges on Aleo while maintaining simplicity for the sprint deadline. Swapping has never been so sweet!
 
 ## 🚀 **MVP for Aleo Code Sprint 4.0**
