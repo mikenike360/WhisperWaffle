@@ -7,7 +7,12 @@ import { WalletNotConnectedError } from '@demox-labs/aleo-wallet-adapter-base';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useRandomImages } from '@/utils/useRandomImages';
-import Spline from '@splinetool/react-spline';
+import dynamic from 'next/dynamic';
+
+const Spline = dynamic(() => import('@splinetool/react-spline'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-gradient-to-br from-primary via-primary-focus to-primary-content" />
+});
 
 const MainPage: NextPageWithLayout = () => {
   const { publicKey } = useWallet();
@@ -46,6 +51,9 @@ const MainPage: NextPageWithLayout = () => {
           <Spline
             scene="https://prod.spline.design/BN0PKZUnejPrAZx9/scene.splinecode"
             style={{ width: '100%', height: '100%' }}
+            onError={(error) => {
+              console.warn('Spline failed to load:', error);
+            }}
           />
         </div>
         
