@@ -3,7 +3,7 @@
 
 ![WhisperWaffle Logo](public/logo.png)
 
-**WhisperWaffle** is a **Minimum Viable Product (MVP)** built for the **Aleo Code Sprint 4.0**, demonstrating core DeFi functionality on the Aleo blockchain. This MVP showcases the potential of building decentralized exchanges on Aleo while maintaining simplicity for the sprint deadline.
+**WhisperWaffle** is a **Minimum Viable Product (MVP)** built for the **Aleo Code Sprint 4.0**, demonstrating core DeFi functionality on the Aleo blockchain for those with a sweet tooth.  This MVP showcases the potential of building decentralized exchanges on Aleo while maintaining simplicity for the sprint deadline. Swapping has never been so sweet!
 
 ## 🚀 **MVP for Aleo Code Sprint 4.0**
 
@@ -31,32 +31,9 @@
 - **Pools**: `create_pool_public()`, `add_liquidity_public()`, `remove_liquidity_public()`
 - **Wrapping**: `deposit_credits_public_signer()`, `withdraw_credits_public_signer()`
 
-## 🎯 **Key Features**
-
 ### **Tokens**
 - **wALEO**: Wrapped ALEO token for DeFi operations
 - **wUSDC**: Custom token for trading
-- **Fixed Rate**: 4:1 exchange rate (4 wALEO = 1 wUSDC)
-
-### **Trading**
-- **Fixed Rate Swaps**: Direct conversion at 4:1 rate
-- **Liquidity Pools**: Basic pool management
-- **Fee**: 0.3% swap fee
-
-## 🤝 **Contributing**
-
-We welcome contributions! Please see our contributing guidelines for code standards, testing, and pull request process.
-
-## 🚀 **Roadmap**
-
-### **Current: Aleo Code Sprint 4.0**
-- **Goal**: Demonstrate DeFi on Aleo blockchain
-- **Status**: MVP with fixed rate trading
-
-### **Future**
-- **Phase 1**: Privacy features and zero-knowledge proofs
-- **Phase 2**: AMM implementation and dynamic pricing
-- **Phase 3**: Cross-chain bridge and governance
 
 ## 📄 **License**
 
