@@ -26,6 +26,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
   const [filteredTokens, setFilteredTokens] = useState<TokenInfo[]>(tokens);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number; openUpward?: boolean } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownPortalRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,7 +47,11 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const isOutsideDropdown = !dropdownRef.current || !dropdownRef.current.contains(target);
+      const isOutsidePortal = !dropdownPortalRef.current || !dropdownPortalRef.current.contains(target);
+      
+      if (isOutsideDropdown && isOutsidePortal) {
         setIsOpen(false);
         setSearchQuery('');
       }
@@ -123,6 +128,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
   }, [isOpen, showSearch]);
 
   const handleTokenSelect = (token: TokenInfo) => {
+    console.log('[TokenSelector] Token selected:', token);
     onTokenSelect(token);
     setIsOpen(false);
     setSearchQuery('');
@@ -193,19 +199,24 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
           {/* Backdrop to capture clicks outside */}
           <div 
             className="fixed inset-0 z-[9999] bg-transparent" 
-            onClick={() => {
-              setIsOpen(false);
-              setSearchQuery('');
+            onMouseDown={(e) => {
+              // Only close if clicking directly on backdrop, not on dropdown
+              if (e.target === e.currentTarget) {
+                setIsOpen(false);
+                setSearchQuery('');
+              }
             }}
           />
           {/* Dropdown menu with fixed positioning */}
           <div 
+            ref={dropdownPortalRef}
             className="fixed bg-white border rounded-lg shadow-xl z-[10000] max-h-80 overflow-hidden"
             style={{ 
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
               width: `${dropdownPosition.width}px`,
             }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
           {showSearch && (
             <div className="p-3 border-b">
@@ -229,7 +240,10 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
               filteredTokens.map((token) => (
                 <button
                   key={token.id}
-                  onClick={() => handleTokenSelect(token)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleTokenSelect(token);
+                  }}
                   className={`w-full p-3 hover:bg-gray-50 text-left flex items-center gap-2 transition-colors ${
                     selectedToken?.id === token.id ? 'bg-blue-50' : ''
                   }`}

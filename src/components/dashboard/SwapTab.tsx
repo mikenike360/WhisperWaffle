@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
@@ -55,6 +55,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
   const [poolReserves, setPoolReserves] = useState<{ reserve1: bigint; reserve2: bigint; swapFee: number } | null>(null);
+  const tokensInitialized = useRef(false);
 
   // Approval state variables
   const [wusdcApproved, setWusdcApproved] = useState<boolean>(false);
@@ -124,9 +125,11 @@ const SwapTab: React.FC<SwapTabProps> = () => {
     fetchCustomTokenBalances();
   }, [publicKey, tokens]);
 
-  // Initialize tokens when they're loaded
+  // Initialize tokens when they're loaded (only once, never reset)
   useEffect(() => {
-    if (tokens.length >= 2 && !fromToken && !toToken) {
+    // Only initialize if we haven't done so before AND tokens are loaded
+    // This will only run once on initial load, never again
+    if (!tokensInitialized.current && tokens.length >= 2) {
       // Set ALEO as default from token
       const aleoToken = tokens.find(token => token.id === NATIVE_ALEO_ID);
       if (aleoToken) {
@@ -142,9 +145,17 @@ const SwapTab: React.FC<SwapTabProps> = () => {
             setToToken(nonAleoToken);
           }
         }
+        tokensInitialized.current = true;
       }
     }
-  }, [tokens, fromToken, toToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens]); // Only depend on tokens - once initialized, this won't run again
+
+  // Clear amounts when tokens change
+  useEffect(() => {
+    setFromAmount('');
+    setToAmount('');
+  }, [fromToken?.id, toToken?.id]);
 
   // Fetch pool reserves when tokens change
   useEffect(() => {
@@ -533,7 +544,10 @@ const SwapTab: React.FC<SwapTabProps> = () => {
         <TokenSelector
           tokens={tokens}
           selectedToken={fromToken}
-          onTokenSelect={setFromToken}
+          onTokenSelect={(token) => {
+            console.log('[SwapTab] From token selected:', token);
+            setFromToken(token);
+          }}
           label="From"
           disabled={tokensLoading || tokens.length === 0}
           placeholder="Select token"
@@ -542,7 +556,10 @@ const SwapTab: React.FC<SwapTabProps> = () => {
         <TokenSelector
           tokens={tokens}
           selectedToken={toToken}
-          onTokenSelect={setToToken}
+          onTokenSelect={(token) => {
+            console.log('[SwapTab] To token selected:', token);
+            setToToken(token);
+          }}
           label="To"
           disabled={tokensLoading || tokens.length === 0}
           placeholder="Select token"
