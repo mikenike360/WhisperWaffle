@@ -14,8 +14,8 @@ require('@demox-labs/aleo-wallet-adapter-reactui/dist/styles.css');
 function HeaderRightArea({ devMode, setDevMode }: { devMode: boolean; setDevMode: (value: boolean) => void }) {
   return (
     <div className="relative order-last flex shrink-0 items-center gap-3 sm:gap-6 lg:gap-8 btn-primary-content text-primary">
-      {/* Dev Mode Toggle */}
-      <div className="flex items-center gap-2">
+      {/* Dev Mode Toggle - Hidden */}
+      {/* <div className="flex items-center gap-2">
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -28,7 +28,7 @@ function HeaderRightArea({ devMode, setDevMode }: { devMode: boolean; setDevMode
             {devMode ? '🔧 Dev Mode' : 'Dev Mode'}
           </span>
         </label>
-      </div>
+      </div> */}
       
       {/* Theme Selector */}
       <ThemeSelector />

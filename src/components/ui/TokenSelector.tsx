@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { TokenInfo } from '@/hooks/use-token-discovery';
 
 interface TokenSelectorProps {
@@ -23,7 +24,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredTokens, setFilteredTokens] = useState<TokenInfo[]>(tokens);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number; openUpward?: boolean } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -57,17 +58,60 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
     };
   }, []);
 
-  // Calculate dropdown position when it opens
-  useEffect(() => {
+  // Calculate dropdown position when it opens or window resizes/scrolls
+  const updateDropdownPosition = () => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const dropdownHeight = 320; // max-h-80 = 320px
+      
+      // Check if dropdown should open upward (if not enough space below)
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+      
+      // Calculate position
+      let top: number;
+      if (openUpward) {
+        top = rect.top - dropdownHeight - 4; // 4px gap above button
+      } else {
+        top = rect.bottom + 4; // 4px gap below button
+      }
+      
+      // Ensure dropdown doesn't go off screen horizontally
+      let left = rect.left;
+      const dropdownWidth = rect.width;
+      if (left + dropdownWidth > viewportWidth) {
+        left = viewportWidth - dropdownWidth - 8; // 8px margin from edge
+      }
+      if (left < 8) {
+        left = 8; // 8px margin from edge
+      }
+      
       setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4, // 4px gap (mt-1)
-        left: rect.left + window.scrollX,
-        width: rect.width,
+        top,
+        left,
+        width: dropdownWidth,
+        openUpward,
       });
     } else {
       setDropdownPosition(null);
+    }
+  };
+
+  useEffect(() => {
+    updateDropdownPosition();
+    
+    // Update position on window resize or scroll
+    if (isOpen) {
+      window.addEventListener('resize', updateDropdownPosition);
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      
+      return () => {
+        window.removeEventListener('resize', updateDropdownPosition);
+        window.removeEventListener('scroll', updateDropdownPosition, true);
+      };
     }
   }, [isOpen]);
 
@@ -92,7 +136,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
   };
 
   return (
-    <div className="relative z-10" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef}>
       <label className="block text-sm font-medium text-gray-700 mb-2">
         {label}
       </label>
@@ -144,11 +188,11 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
         </div>
       </button>
       
-      {isOpen && !disabled && dropdownPosition && (
+      {isOpen && !disabled && dropdownPosition && typeof window !== 'undefined' && createPortal(
         <>
           {/* Backdrop to capture clicks outside */}
           <div 
-            className="fixed inset-0 z-[99] bg-transparent" 
+            className="fixed inset-0 z-[9999] bg-transparent" 
             onClick={() => {
               setIsOpen(false);
               setSearchQuery('');
@@ -156,7 +200,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
           />
           {/* Dropdown menu with fixed positioning */}
           <div 
-            className="fixed bg-white border rounded-lg shadow-xl z-[100] max-h-80 overflow-hidden"
+            className="fixed bg-white border rounded-lg shadow-xl z-[10000] max-h-80 overflow-hidden"
             style={{ 
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
@@ -220,7 +264,8 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
             )}
           </div>
         </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
