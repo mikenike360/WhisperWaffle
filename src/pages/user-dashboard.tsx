@@ -42,7 +42,11 @@ const SwapPage: NextPageWithLayout = () => {
                   {/* Header */}
                   <div className="flex items-center justify-center mb-6 w-full">
                     <div className="text-center">
-                      <h1 className="text-2xl font-bold text-base-content mb-2">WhisperWaffle Dashboard</h1>
+                      <img 
+                        src="/logo_dashboard.png" 
+                        alt="WhisperWaffle Dashboard" 
+                        className="h-36 md:h-48 object-contain mx-auto"
+                      />
                     </div>
                   </div>
 

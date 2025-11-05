@@ -64,10 +64,10 @@ export const ThemeSelector: React.FC = () => {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="select select-bordered max-w-xs min-w-[120px]"
+        className="select select-bordered max-w-xs min-w-[120px] flex items-center justify-start"
         aria-label="Select theme"
       >
-        {currentTheme.label}
+        <span className="block text-left">{currentTheme.label}</span>
       </button>
 
       {isOpen && dropdownPosition && (
@@ -90,13 +90,13 @@ export const ThemeSelector: React.FC = () => {
               <button
                 key={t.value}
                 onClick={() => handleThemeSelect(t.value)}
-                className={`w-full p-3 text-left hover:bg-base-200 transition-colors ${
+                className={`w-full px-4 py-3 text-left hover:bg-base-200 transition-colors flex items-center ${
                   currentTheme.value === t.value
                     ? 'bg-primary text-primary-content font-semibold'
                     : 'text-base-content'
                 }`}
               >
-                {t.label}
+                <span className="block">{t.label}</span>
               </button>
             ))}
           </div>
