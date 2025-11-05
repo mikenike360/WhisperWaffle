@@ -97,13 +97,13 @@ export async function privateTransfer(
   );
 
   // 6. Submit the transaction
-  const txId = await wallet.requestTransaction(transaction);
+  const txId = await wallet.adapter.requestTransaction(transaction);
   setTxStatus(`Private transfer submitted: ${txId}`);
 
   // 7. Poll for completion/finalization
   let finalized = false;
   for (let attempt = 0; attempt < 60; attempt++) {
-    const status = await wallet.transactionStatus(txId);
+    const status = await wallet.adapter.transactionStatus(txId);
     setTxStatus(`Attempt ${attempt + 1}: ${status}`);
 
     if (status === 'Finalized') {

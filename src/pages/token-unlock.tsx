@@ -7,7 +7,6 @@ import Layout from '../layouts/_layout';
 // Constants matching the pattern from addLiquidity.ts
 const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 const CUSTOM_TOKEN_ID = '42069187360666field'; // Updated to correct wUSDC token ID
-const WALEO_TOKEN_ID = '68744147421264673966385360field'; // wALEO token ID
 const DEX_PROGRAM_ADDRESS = 'aleo1xyu6ndzryyelv4n4fg8vdpt87a6ud7zar5rsegjl6z'; // Your DEX program address
 
 const TokenUnlockPage: React.FC = () => {
@@ -327,7 +326,6 @@ const TokenUnlockPage: React.FC = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                   >
                     <option value={CUSTOM_TOKEN_ID}>wUSDC ({CUSTOM_TOKEN_ID})</option>
-                    <option value={WALEO_TOKEN_ID}>wALEO ({WALEO_TOKEN_ID})</option>
                   </select>
                   <p className="text-sm text-gray-500 mt-1">
                     Select the token to manage roles for

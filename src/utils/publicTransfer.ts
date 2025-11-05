@@ -56,13 +56,13 @@ export async function publicTransfer(
   );
 
   // 3. Send the transaction
-  const txId = await wallet.requestTransaction(transTx);
+  const txId = await wallet.adapter.requestTransaction(transTx);
   setTxStatus(`Public transfer submitted: ${txId}`);
 
   // 4. Poll for finalization
   let finalized = false;
   for (let attempt = 0; attempt < 60; attempt++) {
-    const status = await wallet.transactionStatus(txId);
+    const status = await wallet.adapter.transactionStatus(txId);
     if (status === 'Finalized') {
       finalized = true;
       break;

@@ -49,23 +49,16 @@ export async function checkTokenAllowance(
 }
 
 /**
- * Check if both wALEO and wUSDC are approved for the main swap program
+ * Check if wUSDC is approved for the main swap program
  * @param owner - The user's wallet address
  * @param spender - The main swap program address
- * @returns Promise<{waleoApproved: boolean, wusdcApproved: boolean}>
+ * @returns Promise<{wusdcApproved: boolean}>
  */
 export async function checkBothTokenAllowances(
   owner: string,
   spender: string
-): Promise<{waleoApproved: boolean, wusdcApproved: boolean}> {
+): Promise<{wusdcApproved: boolean}> {
   try {
-    // Check wALEO allowance
-    const waleoAllowance = await checkTokenAllowance(
-      '68744147421264673966385360field', // wALEO token ID
-      owner,
-      spender
-    );
-    
     // Check wUSDC allowance
     const wusdcAllowance = await checkTokenAllowance(
       '42069187360666field', // wUSDC token ID
@@ -74,13 +67,11 @@ export async function checkBothTokenAllowances(
     );
     
     return {
-      waleoApproved: waleoAllowance.approved,
       wusdcApproved: wusdcAllowance.approved
     };
   } catch (error) {
-    console.error('Error checking both token allowances:', error);
+    console.error('Error checking token allowances:', error);
     return {
-      waleoApproved: false,
       wusdcApproved: false
     };
   }

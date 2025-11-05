@@ -28,7 +28,7 @@ import { CURRENT_NETWORK, CURRENT_RPC_URL } from '@/types';
 // Initialize the wallet adapters outside the component
 const wallets = [
   new LeoWalletAdapter({
-    appName: 'zKontract',
+    appName: 'WhisperWaffle',
   }),
 ];
 

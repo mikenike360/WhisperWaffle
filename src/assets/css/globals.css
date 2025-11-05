@@ -75,6 +75,23 @@
   .animate-syrup-float {
     animation: syrup-float 4s ease-in-out infinite;
   }
+  
+  /* Glassmorphism Effects - Now using DaisyUI theme-aware classes */
+  .glass-hover {
+    @apply transition-all duration-300;
+  }
+  
+  .glass-hover:hover {
+    @apply shadow-2xl transform -translate-y-1;
+  }
+  
+  .card-hover {
+    @apply transition-all duration-300;
+  }
+  
+  .card-hover:hover {
+    @apply transform -translate-y-1 shadow-2xl;
+  }
 }
 
 /* Custom Waffle Keyframes */
@@ -246,4 +263,16 @@ Styles for Swiper slider
 
 .wallet-adapter-dropdown .wallet-adapter-button {
   @apply bg-base-100 text-base-content ;
+}
+
+/* Page Transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
 }

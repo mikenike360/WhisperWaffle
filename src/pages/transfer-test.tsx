@@ -28,6 +28,16 @@ const TransferTestPage: NextPageWithLayout = () => {
   const [tokenTxStatus, setTokenTxStatus] = useState<string | null>(null);
   const [tokenTxId, setTokenTxId] = useState<string | null>(null);
   
+  // Private to Public Transfer State
+  const [privateToPublicTokenId, setPrivateToPublicTokenId] = useState(CUSTOM_TOKEN_ID);
+  const [privateToPublicRecipient, setPrivateToPublicRecipient] = useState('aleo1xh0ncflwkfzga983lwujsha729c8nwu7phfn8h3gahhj0ms8qytrxec');
+  const [privateToPublicAmount, setPrivateToPublicAmount] = useState('1.0');
+  const [privateTokenRecords, setPrivateTokenRecords] = useState<any[]>([]);
+  const [selectedTokenRecord, setSelectedTokenRecord] = useState<any | null>(null);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+  const [privateToPublicTxStatus, setPrivateToPublicTxStatus] = useState<string | null>(null);
+  const [privateToPublicTxId, setPrivateToPublicTxId] = useState<string | null>(null);
+  
   // General State
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -37,7 +47,14 @@ const TransferTestPage: NextPageWithLayout = () => {
       throw new Error('Wallet adapter not available');
     }
     
+    console.log('🔄 sendAndWait - About to call wallet.adapter.requestTransaction');
+    console.log('🔄 Transaction:', tx);
+    console.log('🔄 wallet.adapter:', wallet.adapter);
+    console.log('🔄 wallet.adapter.connected:', wallet.adapter.connected);
+    console.log('🔄 wallet.adapter.readyState:', wallet.adapter.readyState);
+    
     const id = await wallet.adapter.requestTransaction(tx);
+    console.log('🔄 requestTransaction returned:', id);
     if (!id) throw new Error('No transaction ID returned from wallet');
     
     setStatus(`Transaction submitted: ${id}`);
@@ -175,6 +192,156 @@ const TransferTestPage: NextPageWithLayout = () => {
     }
   };
 
+  // Fetch private token records
+  const fetchPrivateTokenRecords = async () => {
+    if (!wallet?.adapter || !publicKey) {
+      setPrivateToPublicTxStatus('Please connect your wallet first');
+      return;
+    }
+
+    try {
+      setLoadingRecords(true);
+      setPrivateToPublicTxStatus('Fetching private token records...');
+      
+      // Request records from token_registry.aleo
+      const records = await wallet.adapter.requestRecords(TOKEN_REGISTRY_PROGRAM);
+      
+      if (!records || records.length === 0) {
+        setPrivateToPublicTxStatus('No private token records found');
+        setPrivateTokenRecords([]);
+        return;
+      }
+
+      // Helper function to strip type annotations (e.g., ".private", ".public") from token IDs
+      const stripTypeAnnotation = (value: string): string => {
+        if (!value) return value;
+        // Remove type annotations like ".private", ".public", etc.
+        return value.replace(/\.(private|public)$/i, '');
+      };
+
+      // Filter for unspent token records matching the selected token ID
+      const unspentRecords = records.filter((record: any) => {
+        // Check if record is unspent
+        const isUnspent = !record.spent;
+        
+        // Get token_id from record (handle both token_id and tokenId fields)
+        const recordTokenId = record.data?.token_id || record.data?.tokenId;
+        if (!recordTokenId) return false;
+        
+        // Strip type annotations from both the record's token_id and the input token_id for comparison
+        const normalizedRecordTokenId = stripTypeAnnotation(String(recordTokenId));
+        const normalizedInputTokenId = stripTypeAnnotation(privateToPublicTokenId);
+        const matchesTokenId = normalizedRecordTokenId === normalizedInputTokenId;
+        
+        // Also check if the record has a non-zero amount
+        const amountStr = record.data?.amount || '0';
+        const amountValue = amountStr.replace(/u\d+\.(private|public)$/i, ''); // Remove type annotations
+        const hasAmount = BigInt(amountValue || '0') > 0n;
+        
+        return isUnspent && matchesTokenId && hasAmount;
+      });
+
+      setPrivateTokenRecords(unspentRecords);
+      
+      if (unspentRecords.length === 0) {
+        setPrivateToPublicTxStatus(`No unspent private records found for token ID: ${privateToPublicTokenId}`);
+      } else {
+        setPrivateToPublicTxStatus(`Found ${unspentRecords.length} unspent record(s)`);
+        // Auto-select the first record if available
+        if (unspentRecords.length > 0 && !selectedTokenRecord) {
+          setSelectedTokenRecord(unspentRecords[0]);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching private records:', error);
+      setPrivateToPublicTxStatus(`❌ Error fetching records: ${error?.message || 'Unknown error'}`);
+      setPrivateTokenRecords([]);
+    } finally {
+      setLoadingRecords(false);
+    }
+  };
+
+  // Test Private to Public Transfer
+  const testPrivateToPublicTransfer = async () => {
+    if (!publicKey || !wallet) {
+      setPrivateToPublicTxStatus('Please connect your wallet first');
+      return;
+    }
+
+    if (!selectedTokenRecord) {
+      setPrivateToPublicTxStatus('Please select a token record to convert');
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      setPrivateToPublicTxStatus('Preparing private to public transfer...');
+      
+      const amountInSmallestUnits = Math.floor(parseFloat(privateToPublicAmount) * 1000000);
+      const fee = 500000; // 0.5 ALEO
+      
+      // The transfer_private_to_public function signature:
+      // transfer_private_to_public(
+      //   public recipient: address,
+      //   public amount: u128,
+      //   input_record: Token
+      // )
+      
+      // Public inputs: [recipient, amount]
+      // Private input: token record
+      const publicInputs = [
+        privateToPublicRecipient,
+        `${amountInSmallestUnits}u128`
+      ];
+      
+      // Private input: the token record
+      const privateInputs = [selectedTokenRecord];
+      
+      // Combine inputs: public inputs first, then private inputs
+      const allInputs = [...publicInputs, ...privateInputs];
+      
+      const tx = Transaction.createTransaction(
+        publicKey.toString(),
+        CURRENT_NETWORK,
+        TOKEN_REGISTRY_PROGRAM,
+        'transfer_private_to_public',
+        allInputs,
+        fee,
+        false // Fee is public
+      );
+      
+      console.log('Submitting private to public transfer:', {
+        recipient: privateToPublicRecipient,
+        amount: privateToPublicAmount,
+        amountSmallestUnits: amountInSmallestUnits,
+        tokenId: privateToPublicTokenId,
+        record: selectedTokenRecord,
+        fee,
+        inputs: allInputs
+      });
+      
+      const txId = await sendAndWait(tx, setPrivateToPublicTxStatus);
+      setPrivateToPublicTxId(txId);
+      setPrivateToPublicTxStatus(`✅ Private to public transfer successful! TX: ${txId}`);
+      
+      // Refresh records after successful transfer
+      await fetchPrivateTokenRecords();
+      
+    } catch (error: any) {
+      console.error('Private to public transfer error:', error);
+      
+      if (error?.message?.includes('record') || error?.message?.includes('Record')) {
+        setPrivateToPublicTxStatus(`❌ Record Error: ${error.message}. Try selecting a different record or refreshing records.`);
+      } else if (error?.message?.includes('amount') || error?.message?.includes('balance')) {
+        setPrivateToPublicTxStatus(`❌ Amount Error: Check if the record has sufficient balance.`);
+      } else {
+        setPrivateToPublicTxStatus(`❌ Error: ${error?.message || 'Unknown error'}`);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Reset status
   const resetAleoStatus = () => {
     setAleoTxStatus(null);
@@ -184,6 +351,11 @@ const TransferTestPage: NextPageWithLayout = () => {
   const resetTokenStatus = () => {
     setTokenTxStatus(null);
     setTokenTxId(null);
+  };
+
+  const resetPrivateToPublicStatus = () => {
+    setPrivateToPublicTxStatus(null);
+    setPrivateToPublicTxId(null);
   };
 
   return (
@@ -347,6 +519,166 @@ const TransferTestPage: NextPageWithLayout = () => {
               </div>
             </div>
 
+            {/* Private to Public Transfer Test */}
+            <div className="mt-8 p-6 bg-white rounded-xl border shadow-sm">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">🔓 Private to Public Token Transfer</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Convert private tokens to public tokens using <code className="bg-gray-100 px-1 rounded">transfer_private_to_public</code> from token_registry.aleo
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Token ID
+                  </label>
+                  <input
+                    type="text"
+                    value={privateToPublicTokenId}
+                    onChange={(e) => {
+                      setPrivateToPublicTokenId(e.target.value);
+                      setSelectedTokenRecord(null); // Reset selected record when token ID changes
+                    }}
+                    placeholder={CUSTOM_TOKEN_ID}
+                    className="w-full border rounded-lg px-3 py-2 font-mono text-sm"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    The token ID to search for in your private records
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Private Token Records
+                    </label>
+                    <button
+                      onClick={fetchPrivateTokenRecords}
+                      disabled={!publicKey || loadingRecords}
+                      className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {loadingRecords ? 'Loading...' : '🔍 Fetch Records'}
+                    </button>
+                  </div>
+                  
+                  {privateTokenRecords.length > 0 ? (
+                    <div className="space-y-2">
+                      {privateTokenRecords.map((record, index) => {
+                        // Extract and format the amount, removing type annotations
+                        const amountStr = record.data?.amount || record.data?.microcredits || '0';
+                        const amountValue = amountStr.replace(/u\d+\.(private|public)$/i, '');
+                        const recordAmount = BigInt(amountValue || '0').toString();
+                        const isSelected = selectedTokenRecord === record;
+                        
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => setSelectedTokenRecord(record)}
+                            className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="text-xs font-mono text-gray-600 break-all mb-1">
+                                  {record.programId || 'token_registry.aleo'}
+                                </div>
+                                <div className="text-sm font-medium text-gray-800">
+                                  Amount: {recordAmount}
+                                </div>
+                                {record.spent !== undefined && (
+                                  <div className={`text-xs mt-1 ${record.spent ? 'text-red-600' : 'text-green-600'}`}>
+                                    {record.spent ? 'Spent' : 'Available'}
+                                  </div>
+                                )}
+                              </div>
+                              {isSelected && (
+                                <div className="ml-2 text-blue-500">✓</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-3 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-600 text-center">
+                      {loadingRecords 
+                        ? 'Loading records...' 
+                        : 'No records found. Click "Fetch Records" to search for private tokens.'}
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Recipient Address (Public)
+                  </label>
+                  <input
+                    type="text"
+                    value={privateToPublicRecipient}
+                    onChange={(e) => setPrivateToPublicRecipient(e.target.value)}
+                    placeholder="aleo1..."
+                    className="w-full border rounded-lg px-3 py-2 font-mono text-sm"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    The address that will receive the public tokens
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Amount to Convert
+                  </label>
+                  <input
+                    type="number"
+                    value={privateToPublicAmount}
+                    onChange={(e) => setPrivateToPublicAmount(e.target.value)}
+                    placeholder="1.0"
+                    step="0.000001"
+                    min="0.000001"
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    Amount to convert from private to public (must not exceed record balance)
+                  </div>
+                </div>
+                
+                <button
+                  onClick={testPrivateToPublicTransfer}
+                  disabled={!publicKey || isProcessing || !selectedTokenRecord}
+                  className="w-full bg-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {!publicKey 
+                    ? 'Connect Wallet' 
+                    : !selectedTokenRecord
+                    ? 'Select a Record First'
+                    : isProcessing 
+                    ? 'Processing...' 
+                    : 'Convert Private to Public'}
+                </button>
+                
+                {privateToPublicTxStatus && (
+                  <div className="mt-4 p-3 rounded-lg bg-gray-50 border">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">{privateToPublicTxStatus}</div>
+                      <button
+                        onClick={resetPrivateToPublicStatus}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {privateToPublicTxId && (
+                      <div className="mt-2 text-xs font-mono text-gray-600 break-all">
+                        TX ID: {privateToPublicTxId}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Instructions */}
             <div className="mt-8 p-6 bg-blue-50 rounded-xl border border-blue-200">
               <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 How to Use</h3>
@@ -354,8 +686,9 @@ const TransferTestPage: NextPageWithLayout = () => {
                 <p>1. <strong>Connect your wallet</strong> using the wallet adapter</p>
                 <p>2. <strong>Test ALEO Transfer:</strong> Enter recipient address and ALEO amount, then click "Test ALEO Transfer"</p>
                 <p>3. <strong>Test Custom Token Transfer:</strong> Enter recipient address and token amount, then click "Test Token Transfer"</p>
-                <p>4. <strong>Monitor Status:</strong> Watch the transaction status updates below each form</p>
-                <p>5. <strong>Check Explorer:</strong> Use the transaction ID to verify on Aleo explorer</p>
+                <p>4. <strong>Convert Private to Public:</strong> Enter token ID, click "Fetch Records" to find private tokens, select a record, enter recipient and amount, then click "Convert Private to Public"</p>
+                <p>5. <strong>Monitor Status:</strong> Watch the transaction status updates below each form</p>
+                <p>6. <strong>Check Explorer:</strong> Use the transaction ID to verify on Aleo explorer</p>
               </div>
             </div>
 

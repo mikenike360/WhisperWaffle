@@ -29,7 +29,16 @@ module.exports = {
       '4xl': '2160px',
     },
     extend: {
-      // Removed custom color overrides so DaisyUI themes take full effect
+      // Waffle-themed color palette
+      colors: {
+        waffle: {
+          gold: '#F59E0B',      // Primary actions
+          syrup: '#92400E',     // Text, borders
+          butter: '#FEF3C7',    // Light backgrounds
+          honey: '#FBBF24',     // Accents
+          cream: '#FFFBEB',     // Lightest bg
+        },
+      },
       spacing: {
         13: '3.375rem',
       },

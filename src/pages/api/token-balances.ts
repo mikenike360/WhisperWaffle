@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { client, programRpcClient } from '@/components/aleo/rpc';
 
-const EXPLORER_BASE = 'https://api.explorer.aleo.org/v1/testnet';
+const EXPLORER_BASE = 'https://api.explorer.aleo.org/v1/mainnet';
 const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 
 type BalanceItem = {

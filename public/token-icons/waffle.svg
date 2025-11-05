@@ -1,0 +1,71 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Fun Waffle Token</title>
+  <desc id="desc">A round waffle coin with a cute face, bite mark, and syrup drip.</desc>
+
+  <!-- ===== Theme (edit these) ===== -->
+  <defs>
+    <style>
+      :root {
+        --waffle:#F5B54C;        /* waffle base */
+        --waffle-deep:#D9952E;   /* waffle shadows / rim */
+        --grid:#A56B1E;          /* grooves */
+        --syrup:#7A3B10;         /* syrup */
+        --face:#3B2A1A;          /* eyes/mouth */
+        --shine:#FFFFFF;         /* highlight */
+      }
+    </style>
+
+    <!-- Bite mask -->
+    <mask id="bite">
+      <!-- full circle visible -->
+      <rect x="0" y="0" width="256" height="256" fill="#fff"></rect>
+      <!-- chomp out a crescent of circles -->
+      <circle cx="210" cy="60" r="18" fill="#000"></circle>
+      <circle cx="195" cy="72" r="14" fill="#000"></circle>
+      <circle cx="226" cy="76" r="12" fill="#000"></circle>
+    </mask>
+  </defs>
+
+  <!-- Shadow -->
+  <ellipse cx="128" cy="206" rx="78" ry="18" fill="#000" opacity="0.08"></ellipse>
+
+  <!-- Waffle base (round coin) -->
+  <g mask="url(#bite)">
+    <circle cx="128" cy="122" r="92" fill="var(--waffle)"></circle>
+    <!-- soft rim -->
+    <circle cx="128" cy="122" r="92" fill="none" stroke="var(--waffle-deep)" stroke-width="8" opacity="0.55"></circle>
+  </g>
+
+  <!-- Waffle grid grooves -->
+  <g stroke="var(--grid)" stroke-width="8" stroke-linecap="round" opacity="0.55">
+    <!-- verticals -->
+    <path d="M82 42 V202"></path>
+    <path d="M106 42 V202"></path>
+    <path d="M130 42 V202"></path>
+    <path d="M154 42 V202"></path>
+    <path d="M178 42 V202"></path>
+    <!-- horizontals -->
+    <path d="M38 82 H218"></path>
+    <path d="M38 106 H218"></path>
+    <path d="M38 130 H218"></path>
+    <path d="M38 154 H218"></path>
+    <path d="M38 178 H218"></path>
+  </g>
+
+  <!-- Syrup drip (simple, friendly) -->
+  <path d="M168 84c14-4 22 6 20 17-2 9-10 14-18 18-6 3-7 9-6 14 2 7-1 14-7 16-7 2-12-4-13-11-1-7-6-11-12-8-5 3-8 2-12-2-5-6-2-16 5-21 12-9 26-18 43-23z" fill="var(--syrup)" opacity="0.92"></path>
+
+  <!-- Cute face -->
+  <!-- eyes -->
+  <circle cx="102" cy="118" r="6.5" fill="var(--face)"></circle>
+  <circle cx="154" cy="118" r="6.5" fill="var(--face)"></circle>
+  <!-- smile -->
+  <path d="M110 144c8 10 28 10 36 0" fill="none" stroke="var(--face)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <!-- Tiny highlight -->
+  <circle cx="92" cy="70" r="10" fill="var(--shine)" opacity="0.18"></circle>
+  <circle cx="105" cy="63" r="4" fill="var(--shine)" opacity="0.25"></circle>
+
+  <!-- Subtle inner ring for depth -->
+  <circle cx="128" cy="122" r="74" fill="none" stroke="#000" opacity="0.06" stroke-width="10"></circle>
+</svg>

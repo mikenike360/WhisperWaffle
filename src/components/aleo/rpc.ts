@@ -8,7 +8,7 @@ export const CREDITS_PROGRAM_ID = 'credits.aleo';
 // Create the JSON-RPC client
 export const client = getClient(CURRENT_RPC_URL);
 // Dedicated JSON-RPC client for Aleo testnetbeta RPC (program tx listings, etc.)
-export const programRpcClient = getClient('https://testnetbeta.aleorpc.com');
+export const programRpcClient = getClient('ttps://mainnet.aleorpc.com"');
 
 
 // returns a string for address-based mappings

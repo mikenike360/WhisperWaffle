@@ -7,48 +7,9 @@ import { Twitter } from '@/components/icons/twitter';
 import { Discord } from '@/components/icons/discord';
 import { useTheme } from 'next-themes';
 import Footer from '@/components/ui/Footer';
+import { ThemeSelector } from '@/components/ui/ThemeSelector';
 
 require('@demox-labs/aleo-wallet-adapter-reactui/dist/styles.css');
-
-// Define the list of DaisyUI themes you want to offer
-
-
-const themes = [
-  "light",
-  "dark",
-  "cyberpunk", // This will show as "Waffle" in the dropdown
-];
-
-// ThemeSelector component using Next Themes
-function ThemeSelector() {
-  const { theme, setTheme } = useTheme();
-  // Use a mount flag to avoid SSR mismatch
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    // Set cyberpunk as default theme if no theme is set
-    if (!theme) {
-      setTheme('cyberpunk');
-    }
-  }, [theme, setTheme]);
-
-  if (!mounted) return null;
-
-  return (
-    <select
-      value={theme || 'cyberpunk'}
-      onChange={(e) => setTheme(e.target.value)}
-      className="select select-bordered max-w-xs"
-    >
-      {themes.map((t) => (
-        <option key={t} value={t}>
-          {t === 'cyberpunk' ? 'Waffle' : t.charAt(0).toUpperCase() + t.slice(1)}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 function HeaderRightArea({ devMode, setDevMode }: { devMode: boolean; setDevMode: (value: boolean) => void }) {
   return (
@@ -69,7 +30,7 @@ function HeaderRightArea({ devMode, setDevMode }: { devMode: boolean; setDevMode
         </label>
       </div>
       
-      {/* Use the updated ThemeSelector */}
+      {/* Theme Selector */}
       <ThemeSelector />
       <WalletMultiButton />
     </div>

@@ -8,6 +8,7 @@ import { useUserBalances } from '../hooks/use-user-balances';
 import { registerToken } from '../utils/tokenRegistration';
 import { mintTokens } from '../utils/mintTokens';
 import { addLiquidity } from '../utils/addLiquidity';
+import { GlassCard } from '@/components/ui/GlassCard';
 
 const TokenPage: NextPageWithLayout = () => {
   const { wallet, publicKey } = useWallet();
@@ -191,52 +192,49 @@ const TokenPage: NextPageWithLayout = () => {
   return (
     <div>
       <NextSeo title="WhisperWaffle Token Studio" />
-      <div className="flex flex-col items-center justify-start min-h-screen bg-gradient-to-br from-primary via-primary-focus to-primary-content pt-20 md:pt-24 pb-12">
-        <div className="w-full max-w-4xl bg-white/90 backdrop-blur p-6 rounded-2xl shadow-lg">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <img src={randomImages.header.src} alt={randomImages.header.alt} className="w-12 h-12 object-contain" />
-              <h1 className="text-3xl font-bold text-gray-800">Token Management</h1>
+      <div className="flex flex-col items-center justify-start min-h-screen bg-base-200 pt-20 md:pt-24 pb-12">
+        <div className="w-full max-w-4xl px-4">
+          <GlassCard className="p-6 md:p-8">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold text-base-content">Token Management</h1>
+              </div>
+              <div className="flex items-center gap-2">
+
+              </div>
             </div>
-            <div className="flex items-center gap-2">
 
+            {!publicKey && (
+              <div className="text-center">
+                <p className="text-base-content/60">Please connect your wallet to access the admin panel.</p>
+              </div>
+            )}
+
+            {/* Tab Navigation */}
+            <div className="flex border-b border-base-300 mb-6 gap-1">
+              {[
+                // { id: 'pool', label: 'Pairing', icon: '🧇' }, // Hidden for now
+                { id: 'register', label: 'Create Token', icon: '🏷️' },
+                { id: 'mint', label: 'Mint Tokens', icon: '🪙' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-6 py-3 text-base font-medium border-b-2 transition-all ${
+                    activeTab === tab.id
+                      ? 'border-primary text-primary font-bold'
+                      : 'border-transparent text-base-content/60 hover:text-primary hover:border-primary/50'
+                  }`}
+                >
+                  <span className="text-2xl mr-2">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
             </div>
-          </div>
-
-          {!publicKey && (
-            <div className="text-center">
-              <p className="text-gray-600">Please connect your wallet to access the admin panel.</p>
-            </div>
-          )}
-
-
-
-
-          {/* Tab Navigation */}
-          <div className="flex space-x-1 bg-white rounded-lg p-1 shadow-lg mb-8">
-          {[
-            // { id: 'pool', label: 'Pairing', icon: '🧇' }, // Hidden for now
-            { id: 'register', label: 'Create Token', icon: '🏷️' },
-            { id: 'mint', label: 'Mint Tokens', icon: '🪙' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-3 px-4 rounded-md font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-amber-500 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-              }`}
-            >
-              <span className="mr-2">{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-          </div>
 
           {/* Tab Content */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="p-6">
           {/* Pool Management Tab - Hidden for now */}
           {/* {activeTab === 'pool' && (
             <div>
@@ -305,10 +303,10 @@ const TokenPage: NextPageWithLayout = () => {
           {/* Token Registration Tab */}
           {activeTab === 'register' && (
             <div>
-              <h2 className="text-2xl font-bold mb-6">🏷️ Token Registration</h2>
+              <h2 className="text-2xl font-bold mb-6 text-base-content">🏷️ Token Registration</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Token ID
                   </label>
                   <input
@@ -316,12 +314,12 @@ const TokenPage: NextPageWithLayout = () => {
                     value={registrationData.tokenId}
                     onChange={(e) => setRegistrationData({ ...registrationData, tokenId: e.target.value })}
                     placeholder="e.g., 42069187360field"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Token Name
                   </label>
                   <input
@@ -329,12 +327,12 @@ const TokenPage: NextPageWithLayout = () => {
                     value={registrationData.name}
                     onChange={(e) => setRegistrationData({ ...registrationData, name: e.target.value })}
                     placeholder="e.g., WhisperWaffle Token"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Token Symbol
                   </label>
                   <input
@@ -342,12 +340,12 @@ const TokenPage: NextPageWithLayout = () => {
                     value={registrationData.symbol}
                     onChange={(e) => setRegistrationData({ ...registrationData, symbol: e.target.value })}
                     placeholder="e.g., WWT"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Decimals
                   </label>
                   <input
@@ -355,12 +353,12 @@ const TokenPage: NextPageWithLayout = () => {
                     value={registrationData.decimals}
                     onChange={(e) => setRegistrationData({ ...registrationData, decimals: e.target.value })}
                     placeholder="6"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Max Supply
                   </label>
                   <input
@@ -368,7 +366,7 @@ const TokenPage: NextPageWithLayout = () => {
                     value={registrationData.maxSupply}
                     onChange={(e) => setRegistrationData({ ...registrationData, maxSupply: e.target.value })}
                     placeholder="1000000000"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
@@ -378,16 +376,16 @@ const TokenPage: NextPageWithLayout = () => {
                     id="noExternalAuth"
                     checked={registrationData.noExternalAuth}
                     onChange={(e) => setRegistrationData({ ...registrationData, noExternalAuth: e.target.checked })}
-                    className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-primary focus:ring-primary border-base-300 rounded"
                   />
-                  <label htmlFor="noExternalAuth" className="text-sm font-medium text-gray-700">
+                  <label htmlFor="noExternalAuth" className="text-sm font-medium text-base-content">
                     No External Authorization Required
                   </label>
                 </div>
                 
                 {!registrationData.noExternalAuth && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-base-content mb-2">
                       External Authorization Party
                     </label>
                     <input
@@ -395,16 +393,16 @@ const TokenPage: NextPageWithLayout = () => {
                       value={registrationData.externalAuthParty}
                       onChange={(e) => setRegistrationData({ ...registrationData, externalAuthParty: e.target.value })}
                       placeholder={publicKey || "aleo1..."}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                     />
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-base-content/60 mt-1">
                       Address that can authorize token spending (leave empty to use your address)
                     </p>
                   </div>
                 )}
                 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-700">
+                <div className="bg-base-200 border border-base-300 rounded-lg p-3">
+                  <p className="text-sm text-base-content/80">
                     <strong>ℹ️ External Authorization:</strong> When checked, tokens can be transferred directly without requiring external approval. 
                     Leave unchecked if you want to require external authorization for spending.
                   </p>
@@ -413,7 +411,7 @@ const TokenPage: NextPageWithLayout = () => {
                 <button
                   onClick={handleRegisterToken}
                   disabled={loading}
-                  className="w-full bg-amber-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full bg-primary text-primary-content py-3 px-6 rounded-lg font-medium hover:bg-primary-focus disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? 'Registering Token...' : 'Register Token'}
                 </button>
@@ -424,10 +422,10 @@ const TokenPage: NextPageWithLayout = () => {
           {/* Token Minting Tab */}
           {activeTab === 'mint' && (
             <div>
-              <h2 className="text-2xl font-bold mb-6">🪙 Token Minting</h2>
+              <h2 className="text-2xl font-bold mb-6 text-base-content">🪙 Token Minting</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Token ID
                   </label>
                   <input
@@ -435,12 +433,12 @@ const TokenPage: NextPageWithLayout = () => {
                     value={mintingData.tokenId}
                     onChange={(e) => setMintingData({ ...mintingData, tokenId: e.target.value })}
                     placeholder="e.g., 42069187360field"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Amount to Mint
                   </label>
                   <input
@@ -448,15 +446,15 @@ const TokenPage: NextPageWithLayout = () => {
                     value={mintingData.amount}
                     onChange={(e) => setMintingData({ ...mintingData, amount: e.target.value })}
                     placeholder="e.g., 1000000000"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-base-content/60 mt-1">
                     Raw amount (in smallest units, e.g., 1000000000 = 1000 tokens with 6 decimals)
                   </p>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Recipient Address
                   </label>
                   <input
@@ -464,12 +462,12 @@ const TokenPage: NextPageWithLayout = () => {
                     value={mintingData.recipient}
                     onChange={(e) => setMintingData({ ...mintingData, recipient: e.target.value })}
                     placeholder="aleo1..."
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-base-content mb-2">
                     Nonce
                   </label>
                   <input
@@ -477,14 +475,14 @@ const TokenPage: NextPageWithLayout = () => {
                     value={mintingData.nonce}
                     onChange={(e) => setMintingData({ ...mintingData, nonce: e.target.value })}
                     placeholder="e.g., 0u64"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    className="w-full p-3 border border-base-300 rounded-lg bg-base-100 text-base-content focus:ring-2 focus:ring-primary focus:border-primary"
                   />
                 </div>
                 
                 <button
                   onClick={handleMintTokens}
                   disabled={loading}
-                  className="w-full bg-amber-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full bg-primary text-primary-content py-3 px-6 rounded-lg font-medium hover:bg-primary-focus disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? 'Minting Tokens...' : 'Mint Tokens'}
                 </button>
@@ -497,36 +495,14 @@ const TokenPage: NextPageWithLayout = () => {
           {message && (
             <div className={`mt-6 p-4 rounded-lg ${
               message.includes('Error') 
-                ? 'bg-red-50 border border-red-200 text-red-800' 
-                : 'bg-green-50 border border-green-200 text-green-800'
+                ? 'bg-error/10 border border-error/20 text-error' 
+                : 'bg-success/10 border border-success/20 text-success'
             }`}>
               {message}
             </div>
           )}
+          </GlassCard>
         </div>
-
-        {/* Static Waffles */}
-        <div className="fixed inset-0 pointer-events-none z-10">
-          <div className="absolute top-20 left-10 text-2xl opacity-15">🧇</div>
-          <div className="absolute top-40 right-20 text-xl opacity-15">🧇</div>
-          <div className="absolute bottom-40 left-20 text-2xl opacity-15">🧇</div>
-          <div className="absolute bottom-20 right-10 text-xl opacity-15">🧇</div>
-        </div>
-
-        {/* Character Images */}
-        <div className="fixed inset-0 pointer-events-none z-5">
-          <div className="absolute top-10 left-5 opacity-20">
-            <img src={randomImages.background1.src} alt={randomImages.background1.alt} className="w-16 h-16 object-contain" />
-          </div>
-          <div className="absolute top-1/3 right-5 opacity-20">
-            <img src={randomImages.background2.src} alt={randomImages.background2.alt} className="w-16 h-16 object-contain" />
-          </div>
-          <div className="absolute bottom-1/3 left-5 opacity-20">
-            <img src={randomImages.background3.src} alt={randomImages.background3.alt} className="w-16 h-16 object-contain" />
-          </div>
-        </div>
-
-        {/* Static Syrup Drops */}
 
         
       </div>
