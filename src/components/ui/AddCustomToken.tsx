@@ -1,16 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TokenInfo } from '@/hooks/use-token-discovery';
 
 interface AddCustomTokenProps {
   onTokenAdd: (tokenInfo: Omit<TokenInfo, 'verified'>) => void;
   existingTokens: TokenInfo[];
+  isOpen?: boolean; // Optional controlled state
+  onClose?: () => void; // Optional close handler
+  showButton?: boolean; // Whether to show the button (default true)
 }
 
 export const AddCustomToken: React.FC<AddCustomTokenProps> = ({ 
   onTokenAdd, 
-  existingTokens 
+  existingTokens,
+  isOpen: controlledIsOpen,
+  onClose: controlledOnClose,
+  showButton = true,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  // Use controlled state if provided, otherwise use internal state
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  
+  const handleOpen = () => {
+    if (controlledIsOpen === undefined) {
+      setInternalIsOpen(true);
+    }
+    // If controlled, the parent component manages the state
+  };
+  
+  const handleClose = () => {
+    if (controlledIsOpen === undefined) {
+      setInternalIsOpen(false);
+    } else if (controlledOnClose) {
+      controlledOnClose();
+    }
+  };
   const [formData, setFormData] = useState({
     tokenId: '',
     symbol: '',
@@ -97,11 +121,11 @@ export const AddCustomToken: React.FC<AddCustomTokenProps> = ({
       iconUrl: '',
     });
     setErrors({});
-    setIsOpen(false);
+    handleClose();
   };
 
-  const handleClose = () => {
-    setIsOpen(false);
+  const handleCloseModal = () => {
+    handleClose();
     setFormData({
       tokenId: '',
       symbol: '',
@@ -112,18 +136,34 @@ export const AddCustomToken: React.FC<AddCustomTokenProps> = ({
     setErrors({});
   };
 
+  // Reset form when modal opens in controlled mode
+  useEffect(() => {
+    if (controlledIsOpen !== undefined && controlledIsOpen) {
+      setFormData({
+        tokenId: '',
+        symbol: '',
+        name: '',
+        decimals: 6,
+        iconUrl: '',
+      });
+      setErrors({});
+    }
+  }, [controlledIsOpen]);
+
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2"
-      >
-        <span className="text-lg">+</span>
-        <span>Add Custom Token</span>
-      </button>
+      {showButton && (
+        <button
+          onClick={handleOpen}
+          className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2"
+        >
+          <span className="text-lg">+</span>
+          <span>Add Custom Token</span>
+        </button>
+      )}
 
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10050] p-4">
           <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
@@ -131,7 +171,7 @@ export const AddCustomToken: React.FC<AddCustomTokenProps> = ({
                   Add Custom Token
                 </h3>
                 <button
-                  onClick={handleClose}
+                  onClick={handleCloseModal}
                   className="text-gray-400 hover:text-gray-600 text-xl"
                 >
                   ×
@@ -247,7 +287,7 @@ export const AddCustomToken: React.FC<AddCustomTokenProps> = ({
                 <div className="flex gap-2 pt-4">
                   <button
                     type="button"
-                    onClick={handleClose}
+                    onClick={handleCloseModal}
                     className="flex-1 py-2 px-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Cancel

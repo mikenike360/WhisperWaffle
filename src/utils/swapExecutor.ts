@@ -286,8 +286,32 @@ export function getSwapQuote(
     const reserveIn = isToken1ToToken2 ? reserve1 : reserve2;
     const reserveOut = isToken1ToToken2 ? reserve2 : reserve1;
 
-    // Calculate output amount using AMM formula
-    const amountOut = getAmountOut(amountIn, reserveIn, reserveOut, swapFee);
+    // Validate that reserves are sufficient
+    if (reserveIn === 0n || reserveOut === 0n) {
+      return null; // Empty pool
+    }
+
+    // Validate that input amount doesn't exceed available liquidity
+    // Check if input amount would drain more than 99% of the output reserve
+    // This prevents swaps that would leave the pool with almost no liquidity
+    const amountInWithFee = (amountIn * BigInt(10000 - swapFee)) / 10000n;
+    const numerator = amountInWithFee * reserveOut;
+    const denominator = reserveIn + amountInWithFee;
+    
+    // Calculate what the output would be
+    const amountOut = numerator / denominator;
+    
+    // Check if output would exceed 99% of available reserve (leave at least 1% for pool stability)
+    const maxOutput = (reserveOut * 99n) / 100n;
+    if (amountOut >= maxOutput) {
+      return null; // Insufficient liquidity - would drain too much
+    }
+
+    // Also check if input amount is unreasonably large compared to input reserve
+    // If input is more than 10x the reserve, it's likely an error
+    if (amountIn > reserveIn * 10n) {
+      return null; // Input amount too large
+    }
     
     if (amountOut <= 0n) {
       return null;
@@ -309,6 +333,52 @@ export function getSwapQuote(
     console.error('Error calculating swap quote:', error);
     return null;
   }
+}
+
+/**
+ * Check if there's sufficient liquidity for a swap
+ * @param inputAmount - Input amount in atomic units
+ * @param isToken1ToToken2 - Direction of swap
+ * @param poolReserves - Pool reserves data
+ * @returns Object with isValid flag and error message if invalid
+ */
+export function checkLiquidity(
+  inputAmount: number,
+  isToken1ToToken2: boolean,
+  poolReserves?: { reserve1: bigint; reserve2: bigint; swapFee: number }
+): { isValid: boolean; error?: string } {
+  if (!poolReserves) {
+    return { isValid: false, error: 'Pool not found' };
+  }
+
+  const amountIn = BigInt(inputAmount);
+  const { reserve1, reserve2, swapFee = 30 } = poolReserves;
+
+  const reserveIn = isToken1ToToken2 ? reserve1 : reserve2;
+  const reserveOut = isToken1ToToken2 ? reserve2 : reserve1;
+
+  if (reserveIn === 0n || reserveOut === 0n) {
+    return { isValid: false, error: 'Pool is empty' };
+  }
+
+  // Check if input amount is too large (more than 10x the input reserve)
+  if (amountIn > reserveIn * 10n) {
+    return { isValid: false, error: 'Insufficient liquidity: Input amount exceeds available reserves' };
+  }
+
+  // Calculate what the output would be
+  const amountInWithFee = (amountIn * BigInt(10000 - swapFee)) / 10000n;
+  const numerator = amountInWithFee * reserveOut;
+  const denominator = reserveIn + amountInWithFee;
+  const amountOut = numerator / denominator;
+
+  // Check if output would exceed 99% of available reserve
+  const maxOutput = (reserveOut * 99n) / 100n;
+  if (amountOut >= maxOutput) {
+    return { isValid: false, error: 'Insufficient liquidity: Not enough tokens in pool' };
+  }
+
+  return { isValid: true };
 }
 
 /**

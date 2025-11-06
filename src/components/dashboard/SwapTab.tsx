@@ -3,15 +3,11 @@ import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
 import { useTokenDiscovery, TokenInfo } from '@/hooks/use-token-discovery';
-import { swapAleoForToken, swapTokenForAleo, swapTokens, getSwapQuote, calculateMinOutputWithSlippage } from '@/utils/swapExecutor';
+import { swapAleoForToken, swapTokenForAleo, swapTokens, getSwapQuote, calculateMinOutputWithSlippage, checkLiquidity } from '@/utils/swapExecutor';
 import { getPoolReserves } from '@/utils/poolDataFetcher';
 import { TokenSelector } from '@/components/ui/TokenSelector';
-import { AddCustomToken } from '@/components/ui/AddCustomToken';
 import { NATIVE_ALEO_ID, COMMON_TOKEN_IDS } from '@/types';
 import { fetchTokenBalance } from '@/utils/balanceFetcher';
-import { checkBothTokenAllowances } from '@/utils/allowanceChecker';
-import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
-import { CURRENT_NETWORK } from '@/types';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { PriceImpactBadge } from '@/components/ui/PriceImpactBadge';
@@ -49,19 +45,13 @@ interface SwapTabProps {}
 
 const SwapTab: React.FC<SwapTabProps> = () => {
   const { publicKey, wallet } = useWallet();
-  const [activeSubTab, setActiveSubTab] = useState<'swap' | 'approvals'>('swap');
   const [fromToken, setFromToken] = useState<TokenInfo | null>(null);
   const [toToken, setToToken] = useState<TokenInfo | null>(null);
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
   const [poolReserves, setPoolReserves] = useState<{ reserve1: bigint; reserve2: bigint; swapFee: number } | null>(null);
+  const [liquidityError, setLiquidityError] = useState<string | null>(null);
   const tokensInitialized = useRef(false);
-
-  // Approval state variables
-  const [wusdcApproved, setWusdcApproved] = useState<boolean>(false);
-  const [isCheckingApprovals, setIsCheckingApprovals] = useState<boolean>(true);
-  const [isApprovingWusdc, setIsApprovingWusdc] = useState<boolean>(false);
-  const [approvalStatus, setApprovalStatus] = useState<string>('Checking approvals...');
 
   // Hooks
   const { poolData, loading: poolLoading, error: poolError, refreshPoolData } = usePoolData();
@@ -197,6 +187,13 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       
       const isToken1ToToken2 = fromToken.id < toToken.id;
       
+      // Check liquidity before calculating quote
+      const liquidityCheck = checkLiquidity(amountInAtomic, isToken1ToToken2, poolReserves);
+      if (!liquidityCheck.isValid) {
+        // Return a special object to indicate liquidity error
+        return { error: liquidityCheck.error || 'Insufficient liquidity' };
+      }
+      
       console.log('[SwapTab] Calling getSwapQuote with:', { 
         amountInWhole, 
         amountInAtomic,
@@ -219,6 +216,10 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       
       if (!swapQuote || swapQuote.amountOut <= 0) {
         console.log('[SwapTab] Invalid swap quote');
+        // If we have an amount but no quote, it's likely a liquidity issue
+        if (amountInAtomic > 0) {
+          return { error: 'Insufficient liquidity: Not enough tokens in pool' };
+        }
         return null;
       }
       
@@ -234,13 +235,22 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       };
     } catch (error) {
       console.error('[SwapTab] Quote calculation error:', error);
-      return null;
+      return { error: 'Error calculating swap quote' };
     }
   }, [fromAmount, fromToken, toToken, poolReserves]);
 
+  // Update liquidity error state based on quote
+  useEffect(() => {
+    if (quote && 'error' in quote) {
+      setLiquidityError(quote.error);
+    } else {
+      setLiquidityError(null);
+    }
+  }, [quote]);
+
   // Effects
   useEffect(() => {
-    if (quote) {
+    if (quote && !('error' in quote)) {
       setToAmount(quote.amountOut);
     } else {
       setToAmount('');
@@ -333,90 +343,6 @@ const SwapTab: React.FC<SwapTabProps> = () => {
     }
   }, [publicKey, wallet, fromToken, toToken, fromAmount, toAmount, refreshBalances, refreshPoolData]);
 
-  // Approval functions
-  const checkApprovals = useCallback(async () => {
-    if (!publicKey) return;
-    
-    try {
-      setIsCheckingApprovals(true);
-      setApprovalStatus('Checking existing approvals...');
-      
-      const { wusdcApproved } = await checkBothTokenAllowances(
-        publicKey, 
-        'aleo1xyu6ndzryyelv46m583arr86zq9mplkany4lhtf4e3yn92xw6vrqm9y5uq' // main swap program address
-      );
-      
-      setWusdcApproved(wusdcApproved);
-      
-      if (wusdcApproved) {
-        setApprovalStatus('Token appears to be approved!');
-      } else {
-        setApprovalStatus('No token approvals found - approvals may be needed');
-      }
-      
-    } catch (error) {
-      console.error('Error checking approvals:', error);
-      setApprovalStatus('Error checking approvals');
-    } finally {
-      setIsCheckingApprovals(false);
-    }
-  }, [publicKey]);
-
-  const approveWusdc = useCallback(async () => {
-    if (!publicKey || !wallet) return;
-    
-    try {
-      setIsApprovingWusdc(true);
-      setApprovalStatus('Approving wUSDC...');
-      
-      // Create approval transaction for wUSDC
-      const transaction = Transaction.createTransaction(
-        publicKey,
-        CURRENT_NETWORK,
-        'token_registry.aleo',
-        'approve_public',
-        [
-          '42069187360666field', // wUSDC token ID
-          'aleo1xyu6ndzryyelv46m583arr86zq9mplkany4lhtf4e3yn92xw6vrqm9y5uq', // main swap program address
-          '1000000000000u128' // approval amount (1 trillion units)
-        ],
-        500000, // fee in microcredits (0.5 ALEO)
-        false
-      );
-
-      // Submit and wait for completion
-      const id = await (wallet.adapter as any).requestTransaction(transaction);
-      if (!id) throw new Error('No transaction ID returned from wallet');
-
-      let status = await (wallet.adapter as any).transactionStatus(id);
-      let attempts = 0;
-      while (status === 'Pending' && attempts < 60) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        status = await (wallet.adapter as any).transactionStatus(id);
-        attempts++;
-      }
-
-      if (status === 'Completed' || status === 'Finalized') {
-        setWusdcApproved(true);
-        setApprovalStatus('wUSDC approved successfully!');
-      } else {
-        setApprovalStatus(`wUSDC approval failed with status: ${status}`);
-      }
-      
-    } catch (error: any) {
-      setApprovalStatus(`Error approving wUSDC: ${error?.message || 'Unknown error'}`);
-    } finally {
-      setIsApprovingWusdc(false);
-    }
-  }, [publicKey, wallet]);
-
-  // Check approvals when wallet connects
-  useEffect(() => {
-    if (publicKey) {
-      checkApprovals();
-    }
-  }, [publicKey, checkApprovals]);
-
   // Helper function to get balance for a token
   const getBalance = (symbol: string, tokenId?: string): number => {
     // First check common token balances
@@ -441,29 +367,30 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   };
 
   // Computed values
-  const loadingQuote = !quote && fromAmount && Number(fromAmount) > 0 && poolReserves !== null;
+  const hasValidQuote = quote && !('error' in quote);
+  const loadingQuote = !quote && fromAmount && Number(fromAmount) > 0 && poolReserves !== null && !liquidityError;
   const hasBalance = fromToken ? getBalance(fromToken.symbol, fromToken.id) >= Number(fromAmount || 0) : false;
-  const canSwap = publicKey && fromAmount && Number(fromAmount) > 0 && fromToken && toToken && fromToken.id !== toToken.id && hasBalance && quote && poolReserves !== null;
+  const canSwap = publicKey && fromAmount && Number(fromAmount) > 0 && fromToken && toToken && fromToken.id !== toToken.id && hasBalance && hasValidQuote && !liquidityError && poolReserves !== null;
 
   const minReceived = useMemo(() => {
-    if (!quote) return '-';
+    if (!hasValidQuote) return '-';
     const out = Number(quote.amountOut || '0');
     const min = calculateMinOutputWithSlippage(out, 500); // 5% slippage
     return fmtNumber(min);
-  }, [quote]);
+  }, [quote, hasValidQuote]);
 
   const priceImpactStr = useMemo(() => {
-    if (!quote) return '0.00%';
+    if (!hasValidQuote) return '0.00%';
     return `${quote.priceImpact.toFixed(2)}%`;
-  }, [quote]);
+  }, [quote, hasValidQuote]);
 
   const gasEstimate = useMemo(() => '~0.1 ALEO', []);
   
   const priceDisplay = useMemo(() => {
-    if (!quote || !poolReserves || !fromToken || !toToken) return '-';
+    if (!hasValidQuote || !poolReserves || !fromToken || !toToken) return '-';
     const rate = Number(toAmount) / Number(fromAmount);
     return `1 ${fromToken.symbol} = ${fmtNumber(rate)} ${toToken.symbol}`;
-  }, [quote, fromToken, toToken, fromAmount, toAmount]);
+  }, [hasValidQuote, fromToken, toToken, fromAmount, toAmount]);
 
   const poolExists = poolReserves !== null;
   const poolEmpty = poolReserves && poolReserves.reserve1 === BigInt(0) && poolReserves.reserve2 === BigInt(0);
@@ -475,32 +402,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
         <p className="text-xs text-gray-600">AMM-powered exchange</p>
       </div>
 
-      {/* Sub-tabs: Swap / Approvals */}
-      <div className="flex border-b border-gray-200 mb-4">
-        <button
-          onClick={() => setActiveSubTab('swap')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeSubTab === 'swap'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          🔄 Swap Tokens
-        </button>
-        <button
-          onClick={() => setActiveSubTab('approvals')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeSubTab === 'approvals'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          🔐 Token Approvals
-        </button>
-      </div>
-
-      {activeSubTab === 'swap' && (
-        <div className="space-y-4">
+      <div className="space-y-4">
           {/* Loading/Error States */}
       {tokensLoading && (
         <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-center text-blue-800 text-sm">
@@ -539,6 +441,13 @@ const SwapTab: React.FC<SwapTabProps> = () => {
         </div>
       )}
 
+      {/* Liquidity Error */}
+      {liquidityError && fromAmount && Number(fromAmount) > 0 && (
+        <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center text-red-800 text-sm">
+          ⚠️ {liquidityError}
+        </div>
+      )}
+
       {/* Token Selection */}
       <div className="grid grid-cols-2 gap-4">
         <TokenSelector
@@ -551,6 +460,8 @@ const SwapTab: React.FC<SwapTabProps> = () => {
           label="From"
           disabled={tokensLoading || tokens.length === 0}
           placeholder="Select token"
+          showAddCustomToken={true}
+          onTokenAdd={addCustomToken}
         />
         
         <TokenSelector
@@ -563,14 +474,10 @@ const SwapTab: React.FC<SwapTabProps> = () => {
           label="To"
           disabled={tokensLoading || tokens.length === 0}
           placeholder="Select token"
+          showAddCustomToken={true}
+          onTokenAdd={addCustomToken}
         />
       </div>
-
-      {/* Add Custom Token */}
-      <AddCustomToken
-        onTokenAdd={addCustomToken}
-        existingTokens={tokens}
-      />
 
       {/* From Amount */}
       {fromToken && (
@@ -668,7 +575,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       )}
 
       {/* Swap Details */}
-      {quote && (
+      {hasValidQuote && (
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="p-3 bg-gray-50 rounded-lg">
             <span className="text-gray-600">Exchange Rate:</span>
@@ -682,7 +589,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       )}
 
       {/* Transaction Details */}
-      {quote && (
+      {hasValidQuote && (
         <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
           <h3 className="font-medium text-blue-800 mb-2">Transaction Details</h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -692,11 +599,11 @@ const SwapTab: React.FC<SwapTabProps> = () => {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-blue-700">Price impact:</span>
-              <PriceImpactBadge impact={quote ? quote.priceImpact : 0} />
+              <PriceImpactBadge impact={hasValidQuote ? quote.priceImpact : 0} />
             </div>
             <div className="flex justify-between">
               <span className="text-blue-700">Fee:</span>
-              <span className="font-medium">{quote ? `${(quote.fee / Number(fromAmount) * 100).toFixed(2)}%` : '0.30%'}</span>
+              <span className="font-medium">{hasValidQuote ? `${(quote.fee / Number(fromAmount) * 100).toFixed(2)}%` : '0.30%'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-blue-700">Gas:</span>
@@ -738,6 +645,8 @@ const SwapTab: React.FC<SwapTabProps> = () => {
             <LoadingSpinner size="small" />
             <span>Calculating...</span>
           </>
+        ) : liquidityError ? (
+          'Insufficient Liquidity'
         ) : !poolExists ? (
           'Pool Not Found'
         ) : poolEmpty ? (
@@ -751,70 +660,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       
       {/* Success Animation */}
       <SuccessAnimation show={showSuccess} onComplete={() => setShowSuccess(false)} />
-        </div>
-      )}
-
-      {activeSubTab === 'approvals' && (
-        <div className="space-y-4">
-          {/* Approval Status */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${wusdcApproved ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                <span className="font-medium">Waffle USDC (wUSDC)</span>
-              </div>
-              <span className={`text-sm ${wusdcApproved ? 'text-green-600' : 'text-gray-500'}`}>
-                {wusdcApproved ? '✓ Approved' : 'Pending'}
-              </span>
-            </div>
-          </div>
-
-          {/* Approval Buttons */}
-          <div className="space-y-3">
-            {!wusdcApproved && (
-              <button
-                onClick={approveWusdc}
-                disabled={isApprovingWusdc || !publicKey}
-                className="w-full bg-purple-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {!publicKey ? 'Connect Wallet' : isApprovingWusdc ? 'Approving wUSDC...' : 'Approve wUSDC'}
-              </button>
-            )}
-          </div>
-
-          {/* Status Message */}
-          {approvalStatus && (
-            <div className="p-3 rounded-lg bg-gray-50 text-sm text-gray-700">
-              {approvalStatus}
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="space-y-2">
-            <button
-              onClick={checkApprovals}
-              disabled={isCheckingApprovals}
-              className="w-full bg-gray-500 text-white py-2 px-4 rounded-lg text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isCheckingApprovals ? 'Checking...' : 'Check Approval Status'}
-            </button>
-          </div>
-
-          {/* Progress Indicator */}
-          <div className="mt-4">
-            <div className="flex justify-between text-sm text-gray-600 mb-1">
-              <span>Approval Progress</span>
-              <span>{wusdcApproved ? '1/1' : '0/1'}</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(wusdcApproved ? 1 : 0) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

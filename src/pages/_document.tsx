@@ -34,12 +34,12 @@ class CustomDocument extends Document {
                     if (storedTheme) {
                       document.documentElement.setAttribute('data-theme', storedTheme);
                     } else {
-                      // If no theme is stored, default to "wireframe":
-                      document.documentElement.setAttribute('data-theme', 'wireframe');
+                      // If no theme is stored, default to "cyberpunk" (Waffle theme):
+                      document.documentElement.setAttribute('data-theme', 'cyberpunk');
                     }
                   } catch (e) {
-                    // On error, fall back to "luxury":
-                    document.documentElement.setAttribute('data-theme', 'luxury');
+                    // On error, fall back to "cyberpunk" (Waffle theme):
+                    document.documentElement.setAttribute('data-theme', 'cyberpunk');
                   }
                 })();
               `,

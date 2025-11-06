@@ -55,7 +55,7 @@ function CustomApp({ Component, pageProps }: AppPropsWithLayout) {
             
           >
             <WalletModalProvider>
-              <ThemeProvider attribute="data-theme" enableSystem={true} defaultTheme="dark">
+              <ThemeProvider attribute="data-theme" enableSystem={true} defaultTheme="cyberpunk">
                 {getLayout(<Component {...pageProps} />)}
               </ThemeProvider>
             </WalletModalProvider>

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { TokenInfo } from '@/hooks/use-token-discovery';
+import { AddCustomToken } from './AddCustomToken';
 
 interface TokenSelectorProps {
   tokens: TokenInfo[];
@@ -10,6 +11,8 @@ interface TokenSelectorProps {
   disabled?: boolean;
   placeholder?: string;
   showSearch?: boolean;
+  onTokenAdd?: (tokenInfo: Omit<TokenInfo, 'verified'>) => void;
+  showAddCustomToken?: boolean;
 }
 
 export const TokenSelector: React.FC<TokenSelectorProps> = ({
@@ -20,11 +23,14 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
   disabled = false,
   placeholder = 'Select Token',
   showSearch = true,
+  onTokenAdd,
+  showAddCustomToken = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredTokens, setFilteredTokens] = useState<TokenInfo[]>(tokens);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number; openUpward?: boolean } | null>(null);
+  const [showAddTokenModal, setShowAddTokenModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownPortalRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -141,6 +147,16 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
     }
   };
 
+  const handleTokenAdd = (tokenInfo: Omit<TokenInfo, 'verified'>) => {
+    if (onTokenAdd) {
+      onTokenAdd(tokenInfo);
+      // Close the dropdown after adding token
+      setIsOpen(false);
+      setSearchQuery('');
+    }
+    setShowAddTokenModal(false);
+  };
+
   return (
     <div className="relative" ref={dropdownRef}>
       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -210,7 +226,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
           {/* Dropdown menu with fixed positioning */}
           <div 
             ref={dropdownPortalRef}
-            className="fixed bg-white border rounded-lg shadow-xl z-[10000] max-h-80 overflow-hidden"
+            className="fixed bg-white border rounded-lg shadow-xl z-[10000] max-h-80 overflow-hidden flex flex-col"
             style={{ 
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
@@ -231,7 +247,7 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
             </div>
           )}
           
-          <div className="max-h-60 overflow-y-auto">
+          <div className="max-h-60 overflow-y-auto flex-1">
             {filteredTokens.length === 0 ? (
               <div className="p-4 text-center text-gray-500 text-sm">
                 {searchQuery ? 'No tokens found' : 'No tokens available'}
@@ -277,9 +293,37 @@ export const TokenSelector: React.FC<TokenSelectorProps> = ({
               ))
             )}
           </div>
+
+          {/* Add Custom Token Button at bottom of dropdown */}
+          {showAddCustomToken && onTokenAdd && (
+            <div className="border-t p-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAddTokenModal(true);
+                  setIsOpen(false);
+                }}
+                className="w-full p-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <span className="text-lg">+</span>
+                <span>Add Custom Token</span>
+              </button>
+            </div>
+          )}
         </div>
         </>,
         document.body
+      )}
+
+      {/* Add Custom Token Modal */}
+      {showAddCustomToken && onTokenAdd && (
+        <AddCustomToken
+          onTokenAdd={handleTokenAdd}
+          existingTokens={tokens}
+          isOpen={showAddTokenModal}
+          onClose={() => setShowAddTokenModal(false)}
+          showButton={false}
+        />
       )}
     </div>
   );
