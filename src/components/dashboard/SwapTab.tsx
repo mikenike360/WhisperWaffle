@@ -603,7 +603,11 @@ const SwapTab: React.FC<SwapTabProps> = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-blue-700">Fee:</span>
-              <span className="font-medium">{hasValidQuote ? `${(quote.fee / Number(fromAmount) * 100).toFixed(2)}%` : '0.30%'}</span>
+              <span className="font-medium">
+                {hasValidQuote && poolReserves 
+                  ? `${(poolReserves.swapFee / 100).toFixed(2)}%` 
+                  : '0.30%'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-blue-700">Gas:</span>
