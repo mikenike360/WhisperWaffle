@@ -15,6 +15,8 @@ interface PoolCardProps {
   token2: CuratedToken;
   poolId: string;
   poolInfo?: PoolInfo;
+  usdPerToken: number;
+  isUsingFallbackPrice: boolean;
   onManageClick: () => void;
 }
 
@@ -23,6 +25,8 @@ export const PoolCard: React.FC<PoolCardProps> = ({
   token2,
   poolId,
   poolInfo,
+  usdPerToken,
+  isUsingFallbackPrice,
   onManageClick,
 }) => {
   const getPoolStatus = () => {
@@ -46,15 +50,12 @@ export const PoolCard: React.FC<PoolCardProps> = ({
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const calculateTVL = (poolInfo: PoolInfo): string => {
+  const calculateTVLValue = (poolInfo: PoolInfo): number => {
     // Convert reserves to decimal amounts
     const reserve1 = Number(poolInfo.reserve1) / Math.pow(10, token1.decimals);
     const reserve2 = Number(poolInfo.reserve2) / Math.pow(10, token2.decimals);
     
-    // For now, just sum (in reality, you'd need token prices)
-    const tvl = reserve1 + reserve2;
-    
-    return tvl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (reserve1 + reserve2) * usdPerToken;
   };
 
   const calculateAPR = (): number => {
@@ -104,7 +105,14 @@ export const PoolCard: React.FC<PoolCardProps> = ({
           {/* Main stats row */}
           <div className="bg-gray-50 rounded-lg p-2">
             <div className="text-xs text-gray-500 mb-1">TVL</div>
-            <div className="text-sm font-bold text-gray-800">${calculateTVL(poolInfo)}</div>
+            <div className="text-sm font-bold text-gray-800">
+              {`${isUsingFallbackPrice ? '~$' : '$'}${calculateTVLValue(poolInfo).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </div>
+            {isUsingFallbackPrice && (
+              <div className="text-[10px] text-gray-500 mt-0.5">
+                Approximate — ALEO price unavailable
+              </div>
+            )}
           </div>
           
           {/* Reserve amounts */}

@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
-import { useTokenDiscovery, TokenInfo } from '@/hooks/use-token-discovery';
+import { useTokenDiscovery } from '@/hooks/use-token-discovery';
 import { CURATED_TOKENS, CuratedToken } from '@/config/tokens';
 import { PoolCard } from '@/components/ui/PoolCard';
 import { PoolManagementModal } from '@/components/ui/PoolManagementModal';
 import { getPoolList, fetchAllPoolsData, PoolInfo as RealPoolInfo } from '@/utils/poolDataFetcher';
 import { NATIVE_ALEO_ID } from '@/types';
+import { useAleoPrice } from '@/hooks/use-aleo-price';
 
 interface PoolInfo extends RealPoolInfo {
   exists: boolean;
@@ -25,6 +26,10 @@ const PoolTab: React.FC = () => {
   const { refreshPoolData } = usePoolData();
   const { refreshBalances } = useUserBalances();
   const { tokens } = useTokenDiscovery();
+  const { price: aleoUsdPrice, loading: aleoPriceLoading, error: aleoPriceError } = useAleoPrice();
+  const fallbackUsdPerToken = 1;
+  const isUsingFallbackPrice = aleoUsdPrice == null;
+  const usdPerToken = aleoUsdPrice ?? fallbackUsdPerToken;
   
   // State for pool management
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
@@ -96,44 +101,58 @@ const PoolTab: React.FC = () => {
   };
 
   // Calculate statistics
+  const mergedTokenMap = useMemo(() => {
+    const map = new Map<string, CuratedToken>();
+
+    CURATED_TOKENS.forEach(token => {
+      map.set(token.id, token);
+    });
+
+    tokens.forEach(token => {
+      map.set(token.id, {
+        id: token.id,
+        symbol: token.symbol,
+        name: token.name,
+        decimals: token.decimals,
+        icon: token.icon ?? '/token-icons/default.svg',
+        verified: token.verified,
+      });
+    });
+
+    return map;
+  }, [tokens]);
+
+  const getTokenMetadata = (tokenId: string): CuratedToken => {
+    const metadata = mergedTokenMap.get(tokenId);
+    if (metadata) {
+      return metadata;
+    }
+
+    return {
+      id: tokenId,
+      symbol: tokenId.slice(0, 4).toUpperCase(),
+      name: 'Unknown Token',
+      decimals: 6,
+      icon: '/token-icons/default.svg',
+      verified: false,
+    };
+  };
+
   const activePoolCount = Object.values(poolsData).length;
   const totalTVL = Object.values(poolsData).reduce((total, pool) => {
-    // Mock TVL calculation - in reality you'd need token prices
-    const reserve1 = Number(pool.reserve1) / Math.pow(10, 6); // Assume 6 decimals
-    const reserve2 = Number(pool.reserve2) / Math.pow(10, 6);
-    return total + reserve1 + reserve2;
+    const token1Meta = getTokenMetadata(pool.token1Id);
+    const token2Meta = getTokenMetadata(pool.token2Id);
+    const reserve1 = Number(pool.reserve1) / Math.pow(10, token1Meta.decimals);
+    const reserve2 = Number(pool.reserve2) / Math.pow(10, token2Meta.decimals);
+    const poolUsdValue = (reserve1 + reserve2) * usdPerToken;
+    return total + poolUsdValue;
   }, 0);
 
   // Convert pool data to pairs for display
   const poolPairs: PoolPair[] = Object.values(poolsData).map(pool => {
-    const token1 = CURATED_TOKENS.find(token => token.id === pool.token1Id);
-    const token2 = CURATED_TOKENS.find(token => token.id === pool.token2Id);
-    
-    if (!token1 || !token2) {
-      // Fallback for unknown tokens
-      const fallbackToken1: CuratedToken = { 
-        id: pool.token1Id, 
-        symbol: 'UNK1', 
-        name: 'Unknown Token 1', 
-        decimals: 6, 
-        icon: '/token-icons/default.svg',
-        verified: false
-      };
-      const fallbackToken2: CuratedToken = { 
-        id: pool.token2Id, 
-        symbol: 'UNK2', 
-        name: 'Unknown Token 2', 
-        decimals: 6, 
-        icon: '/token-icons/default.svg',
-        verified: false
-      };
-      return {
-        token1: fallbackToken1,
-        token2: fallbackToken2,
-        poolId: pool.id
-      };
-    }
-    
+    const token1 = getTokenMetadata(pool.token1Id);
+    const token2 = getTokenMetadata(pool.token2Id);
+
     return {
       token1,
       token2,
@@ -170,9 +189,16 @@ const PoolTab: React.FC = () => {
         
         <div className="p-3 bg-white rounded-lg border shadow-sm text-center">
           <div className="text-lg font-bold text-purple-600 mb-1">
-            ${totalTVL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {`${isUsingFallbackPrice ? '~$' : '$'}${totalTVL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </div>
           <div className="text-xs text-gray-600">Total TVL</div>
+          <div className="text-[10px] text-gray-500 mt-1">
+            {aleoPriceLoading
+              ? 'Loading ALEO price...'
+              : isUsingFallbackPrice
+                ? 'Approximate — fallback assumes $1 per token'
+                : `Based on ALEO price $${aleoUsdPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </div>
         </div>
       </div>
 
@@ -207,6 +233,8 @@ const PoolTab: React.FC = () => {
               token2={pair.token2}
               poolId={pair.poolId}
               poolInfo={poolsData[pair.poolId]}
+              usdPerToken={usdPerToken}
+              isUsingFallbackPrice={isUsingFallbackPrice}
               onManageClick={() => setSelectedPool(pair.poolId)}
             />
           ))}

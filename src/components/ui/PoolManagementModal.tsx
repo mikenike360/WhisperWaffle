@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { Modal } from './Modal';
 import { CuratedToken, CURATED_TOKENS } from '@/config/tokens';
@@ -11,7 +11,7 @@ import {
   removeLiquidityTokens,
   calculateOptimalLiquidityAmounts
 } from '@/utils/addLiquidity';
-import { getPoolInfo, poolExists, getUserLiquidityPosition } from '@/utils/poolDataFetcher';
+import { getPoolInfo, poolExists, getUserLiquidityPosition, LiquidityPosition } from '@/utils/poolDataFetcher';
 
 interface PoolInfo {
   exists: boolean;
@@ -55,7 +55,12 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
   const [status, setStatus] = useState('');
   
   // User position state
-  const [userPosition, setUserPosition] = useState<any>(null);
+  type ExpandedUserPosition = LiquidityPosition & {
+    sharePercentage?: number;
+    token1Amount?: bigint;
+    token2Amount?: bigint;
+  };
+  const [userPosition, setUserPosition] = useState<ExpandedUserPosition | null>(null);
   
   // Token selection for create mode
   const [selectedToken1, setSelectedToken1] = useState<CuratedToken | null>(token1 || null);
@@ -129,10 +134,43 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
   // Fetch user position if pool exists
   useEffect(() => {
     const fetchUserPosition = async () => {
-      if (publicKey && poolInfo?.exists) {
+      if (poolInfo?.exists && publicKey) {
+        const walletAddress =
+          typeof publicKey === 'string'
+            ? publicKey
+            : typeof publicKey === 'object' && 'toString' in publicKey
+              ? (publicKey as { toString: () => string }).toString()
+              : null;
+
+        if (!walletAddress) {
+          setUserPosition(null);
+          return;
+        }
+
         try {
-          const position = await getUserLiquidityPosition(publicKey, poolId);
-          setUserPosition(position);
+          const position = await getUserLiquidityPosition(walletAddress, poolId);
+          if (!position) {
+            setUserPosition(null);
+            return;
+          }
+
+          if (poolInfo?.lpTotalSupply && poolInfo.lpTotalSupply > 0n) {
+            const sharePercentage =
+              (Number(position.lpTokens) / Number(poolInfo.lpTotalSupply)) * 100;
+            const token1Amount =
+              (position.lpTokens * poolInfo.reserve1) / poolInfo.lpTotalSupply;
+            const token2Amount =
+              (position.lpTokens * poolInfo.reserve2) / poolInfo.lpTotalSupply;
+
+            setUserPosition({
+              ...position,
+              sharePercentage,
+              token1Amount,
+              token2Amount,
+            });
+          } else {
+            setUserPosition(position);
+          }
         } catch (error) {
           console.warn('Failed to fetch user position:', error);
           setUserPosition(null);
@@ -141,7 +179,7 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
     };
     
     fetchUserPosition();
-  }, [publicKey, poolId, poolInfo?.exists]);
+  }, [publicKey, poolId, poolInfo?.exists, poolInfo?.lpTotalSupply, poolInfo?.reserve1, poolInfo?.reserve2]);
 
   // Calculate optimal amounts for adding liquidity
   const calculateOptimalAmounts = () => {
@@ -389,6 +427,17 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
   const canAddLiquidity = publicKey && Number(token1Amount) > 0 && Number(token2Amount) > 0 && poolInfo?.exists;
   const canRemoveLiquidity = publicKey && userPosition && userPosition.lpTokens > 0;
 
+  const formatWithCommas = (value: bigint | number): string => {
+    const str = typeof value === 'number' ? Math.floor(value).toString() : value.toString();
+    return str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  const formatLpTokens = (lpTokens: bigint): string => {
+    const divisor = 1_000_000_000_000n;
+    const trimmed = lpTokens / divisor;
+    return formatWithCommas(trimmed);
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
       <div className="space-y-6">
@@ -426,10 +475,14 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
                 <span className="text-blue-700">Swap Fee:</span>
                 <div className="font-medium">{poolInfo.swapFee ? poolInfo.swapFee / 100 : 0.3}%</div>
               </div>
-              <div>
-                <span className="text-blue-700">Pool ID:</span>
-                <div className="font-medium text-xs">{poolId}</div>
-              </div>
+              {(selectedToken1 || token1) && (selectedToken2 || token2) && (
+                <div className="col-span-2">
+                  <span className="text-blue-700">Pool:</span>
+                  <div className="font-medium">
+                    {(selectedToken1 || token1)!.symbol} / {(selectedToken2 || token2)!.symbol}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -441,12 +494,22 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-green-700">LP Tokens:</span>
-                <div className="font-medium">{userPosition.lpTokens}</div>
+                <div className="font-medium">{formatLpTokens(userPosition.lpTokens)}</div>
               </div>
               <div>
                 <span className="text-green-700">Share:</span>
-                <div className="font-medium">{userPosition.sharePercentage?.toFixed(2) || 0}%</div>
+                <div className="font-medium">
+                  {userPosition.sharePercentage
+                    ? `${userPosition.sharePercentage.toFixed(2)}%`
+                    : '0%'}
+                </div>
               </div>
+              {userPosition.token1Amount !== undefined && (selectedToken1 || token1) && (
+                <div className="col-span-2 text-xs text-gray-600">
+                  ≈ {(Number(userPosition.token1Amount) / Math.pow(10, (selectedToken1 || token1)!.decimals)).toFixed(4)} {(selectedToken1 || token1)!.symbol} +{' '}
+                  {(Number(userPosition.token2Amount ?? 0n) / Math.pow(10, (selectedToken2 || token2)!.decimals)).toFixed(4)} {(selectedToken2 || token2)!.symbol}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { useUserBalances } from '@/hooks/use-user-balances';
 import { useTokenDiscovery, TokenInfo } from '@/hooks/use-token-discovery';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { fetchTokenBalance } from '@/utils/balanceFetcher';
 import { NATIVE_ALEO_ID } from '@/types';
+import { CURATED_TOKENS, CuratedToken } from '@/config/tokens';
 
 const BalancesTab: React.FC = () => {
   const { publicKey } = useWallet();
@@ -153,6 +154,85 @@ const BalancesTab: React.FC = () => {
 
   const hasAnyBalance = tokenBalances.some(tb => tb.hasBalance);
 
+  const tokenMetadataMap = useMemo(() => {
+    const map = new Map<string, { symbol: string; name: string; decimals: number }>();
+
+    CURATED_TOKENS.forEach(token => {
+      map.set(token.id, { symbol: token.symbol, name: token.name, decimals: token.decimals });
+    });
+
+    tokens.forEach(token => {
+      map.set(token.id, { symbol: token.symbol, name: token.name, decimals: token.decimals });
+    });
+
+    return map;
+  }, [tokens]);
+
+  const getTokenMetadata = (tokenId: string) => {
+    const metadata = tokenMetadataMap.get(tokenId);
+    if (metadata) {
+      return metadata;
+    }
+
+    return {
+      symbol: tokenId.slice(0, 6).toUpperCase(),
+      name: `Token ${tokenId.slice(0, 6)}`,
+      decimals: 6,
+    };
+  };
+
+  const formatWithCommas = (value: bigint | number): string => {
+    const str = typeof value === 'number' ? Math.floor(value).toString() : value.toString();
+    return str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  const formatAtomicAmount = (amountStr: string, decimals: number): string => {
+    if (!amountStr) return '0';
+    try {
+      const amount = BigInt(amountStr);
+      if (decimals === 0) {
+        return formatWithCommas(amount);
+      }
+      const divisor = 10n ** BigInt(decimals);
+      const whole = amount / divisor;
+      const fraction = amount % divisor;
+      const wholeStr = formatWithCommas(whole);
+      if (fraction === 0n) {
+        return wholeStr;
+      }
+      const fractionStr = fraction
+        .toString()
+        .padStart(decimals, '0')
+        .replace(/0+$/, '')
+        .slice(0, 6);
+      return fractionStr.length > 0 ? `${wholeStr}.${fractionStr}` : wholeStr;
+    } catch (error) {
+      const parsed = parseFloat(amountStr);
+      if (Number.isNaN(parsed)) {
+        return '0';
+      }
+      return parsed.toFixed(4);
+    }
+  };
+
+  const formatLpTokens = (amountStr: string): string => {
+    if (!amountStr) return '0';
+    try {
+      let amount = BigInt(amountStr);
+      const divisor = 1_000_000_000_000n; // 1e12
+      const trimmed = amount / divisor;
+      return formatWithCommas(trimmed);
+    } catch (error) {
+      let parsed = parseFloat(amountStr);
+      if (Number.isNaN(parsed)) {
+        return '0';
+      }
+
+      const trimmed = Math.floor(parsed / 1_000_000_000_000);
+      return formatWithCommas(BigInt(trimmed));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center mb-4">
@@ -254,36 +334,53 @@ const BalancesTab: React.FC = () => {
           <div className="space-y-3">
             {lpPositions.map((position, index) => (
               <GlassCard key={index} hover className="p-3">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-primary font-medium">Pool:</span>
-                    <div className="text-xs font-mono text-base-content/60 truncate">{position.poolId}</div>
-                  </div>
-                  <div>
-                    <span className="text-primary font-medium">LP Tokens:</span>
-                    <div className="font-medium text-base-content">{fmtNumber(position.lpTokens)}</div>
-                  </div>
-                  <div>
-                    <span className="text-primary font-medium">Share:</span>
-                    <div className="font-medium text-base-content">{position.sharePercentage.toFixed(4)}%</div>
-                  </div>
-                  <div>
-                    <span className="text-primary font-medium">Status:</span>
-                    <div className="font-medium text-success">Active</div>
-                  </div>
-                </div>
-                <div className="mt-2 pt-2 border-t border-base-300">
-                  <div className="text-xs text-base-content/80">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="font-medium">{position.token1Symbol}:</span> {fmtNumber(position.token1Amount)}
+                {(() => {
+                  const token1Meta = getTokenMetadata(position.token1Symbol);
+                  const token2Meta = getTokenMetadata(position.token2Symbol);
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-primary font-medium">Pool:</span>
+                          <div className="font-medium text-base-content">
+                            {token1Meta.symbol} / {token2Meta.symbol}
+                          </div>
+                          <div className="text-xs text-base-content/60">
+                            {token1Meta.name} · {token2Meta.name}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-primary font-medium">LP Tokens:</span>
+                          <div className="font-medium text-base-content">
+                            {formatLpTokens(position.lpTokens)}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-primary font-medium">Share:</span>
+                          <div className="font-medium text-base-content">{position.sharePercentage.toFixed(4)}%</div>
+                        </div>
+                        <div>
+                          <span className="text-primary font-medium">Status:</span>
+                          <div className="font-medium text-success">Active</div>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-medium">{position.token2Symbol}:</span> {fmtNumber(position.token2Amount)}
+                      <div className="mt-2 pt-2 border-t border-base-300">
+                        <div className="text-xs text-base-content/80">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="font-medium">{token1Meta.symbol}:</span>{' '}
+                              {formatAtomicAmount(position.token1Amount, token1Meta.decimals)}
+                            </div>
+                            <div>
+                              <span className="font-medium">{token2Meta.symbol}:</span>{' '}
+                              {formatAtomicAmount(position.token2Amount, token2Meta.decimals)}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
+                    </>
+                  );
+                })()}
               </GlassCard>
             ))}
           </div>
