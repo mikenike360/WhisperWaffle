@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { Modal } from './Modal';
 import { CuratedToken, CURATED_TOKENS } from '@/config/tokens';

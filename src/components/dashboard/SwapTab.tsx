@@ -49,7 +49,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   const [toToken, setToToken] = useState<TokenInfo | null>(null);
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
-  const [poolReserves, setPoolReserves] = useState<{ reserve1: bigint; reserve2: bigint; swapFee: number } | null>(null);
+  const [poolReserves, setPoolReserves] = useState<{ reserve1: bigint; reserve2: bigint; swapFee: number; token1Id: string; token2Id: string } | null>(null);
   const [liquidityError, setLiquidityError] = useState<string | null>(null);
   const tokensInitialized = useRef(false);
 
@@ -185,7 +185,14 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       const decimals = fromToken?.decimals || 6;
       const amountInAtomic = Math.floor(amountInWhole * Math.pow(10, decimals));
       
-      const isToken1ToToken2 = fromToken.id < toToken.id;
+      let isToken1ToToken2 = true;
+      if (poolReserves) {
+        if (poolReserves.token1Id === fromToken.id && poolReserves.token2Id === toToken.id) {
+          isToken1ToToken2 = true;
+        } else if (poolReserves.token1Id === toToken.id && poolReserves.token2Id === fromToken.id) {
+          isToken1ToToken2 = false;
+        }
+      }
       
       // Check liquidity before calculating quote
       const liquidityCheck = checkLiquidity(amountInAtomic, isToken1ToToken2, poolReserves);

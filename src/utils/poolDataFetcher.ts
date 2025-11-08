@@ -280,7 +280,7 @@ export async function getOnChainSwapQuote(
 export async function getPoolReserves(
   token1Id: string,
   token2Id: string
-): Promise<{ reserve1: bigint; reserve2: bigint; swapFee: number } | null> {
+): Promise<{ reserve1: bigint; reserve2: bigint; swapFee: number; token1Id: string; token2Id: string } | null> {
   try {
     const poolId = await getPoolId(token1Id, token2Id);
     const poolInfo = await getPoolInfo(poolId);
@@ -297,7 +297,9 @@ export async function getPoolReserves(
     return {
       reserve1,
       reserve2,
-      swapFee: poolInfo.swapFee
+      swapFee: poolInfo.swapFee,
+      token1Id,
+      token2Id
     };
   } catch (error) {
     console.error('Error getting pool reserves:', error);
