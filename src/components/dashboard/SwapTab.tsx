@@ -125,7 +125,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       if (aleoToken) {
         setFromToken(aleoToken);
         // Set WAFFLE as default to token
-        const waffleToken = tokens.find(token => token.id === '42069field');
+        const waffleToken = tokens.find(token => token.id === '42069666field');
         if (waffleToken) {
           setToToken(waffleToken);
         } else {

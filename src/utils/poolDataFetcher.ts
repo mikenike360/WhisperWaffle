@@ -3,6 +3,16 @@
 
 import { PROGRAM_ID, NATIVE_ALEO_ID } from '../types';
 import { getPoolId } from './ammCalculations';
+const DEPRECATED_TOKEN_IDS = new Set<string>(['42069field']);
+
+function isDeprecatedPool(pool: any): boolean {
+  if (!pool) {
+    return false;
+  }
+  const { token1Id, token2Id } = pool;
+  return DEPRECATED_TOKEN_IDS.has(token1Id) || DEPRECATED_TOKEN_IDS.has(token2Id);
+}
+
 
 // Interface for pool information
 export interface PoolInfo {
@@ -193,7 +203,10 @@ export async function getPoolCount(): Promise<number> {
       return 0;
     }
     
-    return data.poolCount || 0;
+    const pools = Array.isArray(data.pools) ? data.pools : [];
+    const filteredPools = pools.filter((pool: any) => !isDeprecatedPool(pool));
+    
+    return filteredPools.length;
   } catch (error) {
     console.error('Error fetching pool count:', error);
     return 0;
@@ -219,7 +232,9 @@ export async function getPoolList(): Promise<string[]> {
       return [];
     }
     
-    return data.pools.map((pool: any) => pool.id);
+    const filteredPools = data.pools.filter((pool: any) => !isDeprecatedPool(pool));
+    
+    return filteredPools.map((pool: any) => pool.id);
   } catch (error) {
     console.error('Error fetching pool list:', error);
     return [];
@@ -395,7 +410,7 @@ export async function fetchAllPoolsData(poolIds: string[]): Promise<Record<strin
   for (const poolId of poolIds) {
     try {
       const poolInfo = await getPoolInfo(poolId);
-      if (poolInfo) {
+      if (poolInfo && !DEPRECATED_TOKEN_IDS.has(poolInfo.token1Id) && !DEPRECATED_TOKEN_IDS.has(poolInfo.token2Id)) {
         poolsData[poolId] = poolInfo;
       }
     } catch (error) {

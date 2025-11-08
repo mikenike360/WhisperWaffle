@@ -50,7 +50,7 @@ export const TOKEN_IDS = {
   vUSDC: '3field',     // Update with actual IDs
   vUSDT: '4field',     // Update with actual IDs
   RATS: '5field',      // Update with actual IDs
-  WAFFLE: '42069field',
+  WAFFLE: '42069666field',
 } as const;
 
 // Common token IDs for balance fetching
