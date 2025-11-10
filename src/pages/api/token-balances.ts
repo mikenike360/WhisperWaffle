@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { client, programRpcClient } from '@/components/aleo/rpc';
+import { NETWORK_SUFFIX } from '@/types';
 
-const EXPLORER_BASE = 'https://api.explorer.aleo.org/v1/mainnet';
+const EXPLORER_BASE = `https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}`;
 const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 
 type BalanceItem = {

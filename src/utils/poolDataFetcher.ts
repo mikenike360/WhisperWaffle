@@ -1,9 +1,9 @@
 // poolDataFetcher.ts
 // Functions to fetch pool information from the AMM DEX contract
 
-import { PROGRAM_ID, NATIVE_ALEO_ID } from '../types';
+import { PROGRAM_ID, NATIVE_ALEO_ID, LEGACY_TOKEN_IDS } from '../types';
 import { getPoolId } from './ammCalculations';
-const DEPRECATED_TOKEN_IDS = new Set<string>(['42069field']);
+const DEPRECATED_TOKEN_IDS = new Set<string>(['42069field', LEGACY_TOKEN_IDS.WAFFLE]);
 
 function isDeprecatedPool(pool: any): boolean {
   if (!pool) {

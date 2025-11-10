@@ -1,5 +1,7 @@
 import { LeoWalletAdapter } from '@demox-labs/aleo-wallet-adapter-leo';
-import { COMMON_TOKEN_IDS, TOKEN_DECIMALS } from '@/types';
+import { COMMON_TOKEN_IDS, TOKEN_DECIMALS, NETWORK_SUFFIX } from '@/types';
+
+const EXPLORER_BASE = `https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}`;
 
 /**
  * Fetch native ALEO balance from credits.aleo program
@@ -8,7 +10,7 @@ import { COMMON_TOKEN_IDS, TOKEN_DECIMALS } from '@/types';
 export async function fetchAleoBalance(publicKey: string): Promise<string> {
   try {
     // Query the credits.aleo program account mapping
-    const response = await fetch(`https://api.explorer.aleo.org/v1/mainnet/program/credits.aleo/mapping/account/${publicKey}`);
+    const response = await fetch(`${EXPLORER_BASE}/program/credits.aleo/mapping/account/${publicKey}`);
     
     if (response.ok) {
       const accountData = await response.json();

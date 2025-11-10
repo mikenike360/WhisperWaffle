@@ -1,14 +1,16 @@
 import { JSONRPCClient } from 'json-rpc-2.0';
-import { PROGRAM_ID } from '@/types';
-import { CURRENT_RPC_URL } from '@/types';
+import { PROGRAM_ID, CURRENT_RPC_URL, IS_MAINNET } from '@/types';
 
 
 export const CREDITS_PROGRAM_ID = 'credits.aleo';
 
 // Create the JSON-RPC client
 export const client = getClient(CURRENT_RPC_URL);
-// Dedicated JSON-RPC client for Aleo testnetbeta RPC (program tx listings, etc.)
-export const programRpcClient = getClient('ttps://mainnet.aleorpc.com"');
+// Dedicated JSON-RPC client for program tx listings, etc.
+const PROGRAM_RPC_URL = IS_MAINNET
+  ? 'https://mainnet.aleorpc.com'
+  : 'https://testnetbeta.aleorpc.com';
+export const programRpcClient = getClient(PROGRAM_RPC_URL);
 
 
 // returns a string for address-based mappings

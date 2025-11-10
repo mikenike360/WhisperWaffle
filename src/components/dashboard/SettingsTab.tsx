@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { testContractConnection } from '@/utils/testConnection';
+import { useSettings, SLIPPAGE_LIMIT_BPS, MIN_SLIPPAGE_BPS } from '@/context/SettingsContext';
+
+const presetOptions = [10, 50, 100, 300, 500, 1000, 2000, 3500, 5000, 7500, 10000]; // basis points
 
 const SettingsTab: React.FC = () => {
-  const [slippage, setSlippage] = useState(0.5);
+  const { slippageBps, setSlippageBps } = useSettings();
+  const [customInput, setCustomInput] = useState<string>(() => (slippageBps / 100).toString());
   const [deadlineMins, setDeadlineMins] = useState(20);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const { wallet, publicKey } = useWallet();
+
+  const slippagePercent = useMemo(() => slippageBps / 100, [slippageBps]);
+
+  const handlePresetClick = (bps: number) => {
+    setSlippageBps(bps);
+    setCustomInput((bps / 100).toString());
+  };
+
+  const handleCustomBlur = () => {
+    const parsed = parseFloat(customInput);
+    if (Number.isNaN(parsed)) {
+      setCustomInput((slippageBps / 100).toString());
+      return;
+    }
+    const clamped = Math.min(Math.max(parsed, MIN_SLIPPAGE_BPS / 100), SLIPPAGE_LIMIT_BPS / 100);
+    setSlippageBps(Math.round(clamped * 100));
+    setCustomInput(clamped.toString());
+  };
 
   const handleTestConnection = async () => {
     if (!wallet || !publicKey) {
@@ -51,23 +73,39 @@ const SettingsTab: React.FC = () => {
       
       <div className="p-4 border rounded-lg bg-gray-50">
         <h3 className="text-lg font-semibold text-gray-800 mb-3">Slippage Tolerance</h3>
-        <div className="flex gap-2 mb-3">
-          {[0.1, 0.5, 1.0].map(p => (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {presetOptions.map((bps) => (
             <button
-              key={p}
-              onClick={() => setSlippage(p)}
+              key={bps}
+              onClick={() => handlePresetClick(bps)}
               className={`px-3 py-1 rounded-lg border transition-colors text-sm ${
-                slippage === p 
-                  ? 'bg-blue-600 text-white border-blue-600' 
+                slippageBps === bps
+                  ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {p}%
+              {(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%
             </button>
           ))}
         </div>
+        <div className="flex items-center gap-2 mb-3">
+          <label htmlFor="custom-slippage" className="text-sm text-gray-700">Custom:</label>
+          <input
+            id="custom-slippage"
+            type="number"
+            min={MIN_SLIPPAGE_BPS / 100}
+            max={SLIPPAGE_LIMIT_BPS / 100}
+            step={0.1}
+            value={customInput}
+            onChange={(e) => setCustomInput(e.target.value)}
+            onBlur={handleCustomBlur}
+            className="border rounded-lg px-2 py-1 w-24 text-sm"
+          />
+          <span className="text-sm text-gray-700">%</span>
+          <span className="text-xs text-gray-500">(max {SLIPPAGE_LIMIT_BPS / 100}%)</span>
+        </div>
         <p className="text-xs text-gray-600 mb-4">
-          Maximum price change you'll accept for swaps.
+          Maximum price change you&apos;ll accept for swaps. Current tolerance: {slippagePercent.toFixed(2)}%.
         </p>
 
         <h3 className="text-lg font-semibold text-gray-800 mb-3">Transaction Deadline</h3>

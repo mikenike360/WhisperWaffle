@@ -2,7 +2,7 @@
 import credits.aleo;
 import token_registry.aleo;
 
-program whisper_waffle_swap_v1.aleo {
+program whisper_waffle_swap_v4.aleo {
 
 
     // Token configuration
@@ -78,6 +78,7 @@ program whisper_waffle_swap_v1.aleo {
         z = (y + x / y) / 2u128;
         return z;
     }
+
 
     inline get_pool_id(token1: field, token2: field) -> field {
         let ordered_token1: field = token1 < token2 ? token1 : token2;
@@ -198,8 +199,18 @@ program whisper_waffle_swap_v1.aleo {
         // Transfer token FROM user TO program
         let token_future: Future = token_registry.aleo/transfer_public_as_signer(token_id, self.address, token_amount);
         
-        // Call finalize function
-        return finalize_create_pool(aleo_future, token_future, self.caller, NATIVE_ALEO_ID, token_id, aleo_amount, token_amount, swap_fee, min_lp);
+        // Call finalize function (canonical tokens computed in finalize)
+        return finalize_create_pool(
+            aleo_future,
+            token_future,
+            self.caller,
+            NATIVE_ALEO_ID,
+            token_id,
+            aleo_amount,
+            token_amount,
+            swap_fee,
+            min_lp
+        );
     }
 
     // Create pool for token + token pair
@@ -221,8 +232,18 @@ program whisper_waffle_swap_v1.aleo {
         // Transfer token2 FROM user TO program
         let token2_future: Future = token_registry.aleo/transfer_public_as_signer(token2_id, self.address, token2_amount);
         
-        // Call finalize function
-        return finalize_create_pool(token1_future, token2_future, self.caller, token1_id, token2_id, token1_amount, token2_amount, swap_fee, min_lp);
+        // Call finalize function (canonical tokens computed in finalize)
+        return finalize_create_pool(
+            token1_future,
+            token2_future,
+            self.caller,
+            token1_id,
+            token2_id,
+            token1_amount,
+            token2_amount,
+            swap_fee,
+            min_lp
+        );
     }
 
     // Add liquidity to native ALEO + token pool
@@ -246,9 +267,19 @@ program whisper_waffle_swap_v1.aleo {
         
         // Transfer token FROM user TO program
         let token_future: Future = token_registry.aleo/transfer_public_as_signer(token_id, self.address, token_amount);
-        
-        // Call finalize function
-        return finalize_add_liquidity(aleo_future, token_future, pool_id, caller_address, aleo_amount, token_amount, min_lp);
+
+        // Call finalize function with canonical ordering (ALEO is always lower)
+        return finalize_add_liquidity(
+            aleo_future,
+            token_future,
+            pool_id,
+            caller_address,
+            NATIVE_ALEO_ID,
+            token_id,
+            aleo_amount,
+            token_amount,
+            min_lp
+        );
     }
 
     // Add liquidity to token + token pool
@@ -273,9 +304,24 @@ program whisper_waffle_swap_v1.aleo {
         
         // Transfer token2 FROM user TO program
         let token2_future: Future = token_registry.aleo/transfer_public_as_signer(token2_id, self.address, token2_amount);
-        
+
+        // Canonicalize ordering before finalize
+        let low_token: field = token1_id < token2_id ? token1_id : token2_id;
+        let high_token: field = token1_id < token2_id ? token2_id : token1_id;
+        let low_amount: u128 = token1_id == low_token ? token1_amount : token2_amount;
+        let high_amount: u128 = token1_id == low_token ? token2_amount : token1_amount;
         // Call finalize function
-        return finalize_add_liquidity(token1_future, token2_future, pool_id, caller_address, token1_amount, token2_amount, min_lp);
+        return finalize_add_liquidity(
+            token1_future,
+            token2_future,
+            pool_id,
+            caller_address,
+            low_token,
+            high_token,
+            low_amount,
+            high_amount,
+            min_lp
+        );
     }
 
 
@@ -287,9 +333,13 @@ program whisper_waffle_swap_v1.aleo {
         public token_id: field,
         public lp_tokens_to_burn: u128,
         public min_aleo_out: u128,
-        public min_token_out: u128
+        public min_token_out: u128,
+        public expected_aleo_out: u128,
+        public expected_token_out: u128
     ) -> Future {
         assert(lp_tokens_to_burn > 0u128);
+        assert(expected_aleo_out >= min_aleo_out);
+        assert(expected_token_out >= min_token_out);
 
         // Get caller address outside async block
         let caller_address: address = self.caller;
@@ -297,14 +347,26 @@ program whisper_waffle_swap_v1.aleo {
         // Generate pool ID
         let pool_id: field = get_pool_id(NATIVE_ALEO_ID, token_id);
 
-        // Transfer ALEO FROM program TO user
-        let aleo_future: Future = credits.aleo/transfer_public(caller_address, (min_aleo_out as u64));
-        
-        // Transfer token FROM program TO user
-        let token_future: Future = token_registry.aleo/transfer_public(token_id, caller_address, min_token_out);
-        
-        // Return the futures and call finalize function
-        return finalize_remove_liquidity(aleo_future, token_future, pool_id, caller_address, lp_tokens_to_burn, min_aleo_out, min_token_out);
+        assert(expected_aleo_out <= 18446744073709551615u128);
+
+        let payout_low_future: Future = credits.aleo/transfer_public(caller_address, (expected_aleo_out as u64));
+        let payout_high_future: Future = token_registry.aleo/transfer_public(token_id, caller_address, expected_token_out);
+
+        return finalize_remove_liquidity(
+            payout_low_future,
+            payout_high_future,
+            pool_id,
+            caller_address,
+            NATIVE_ALEO_ID,
+            token_id,
+            lp_tokens_to_burn,
+            expected_aleo_out,
+            expected_token_out,
+            min_aleo_out,
+            min_token_out,
+            expected_aleo_out,
+            expected_token_out
+        );
     }
 
     // Remove liquidity from token + token pool
@@ -313,9 +375,13 @@ program whisper_waffle_swap_v1.aleo {
         public token2_id: field,
         public lp_tokens_to_burn: u128,
         public min_token1_out: u128,
-        public min_token2_out: u128
+        public min_token2_out: u128,
+        public expected_token1_out: u128,
+        public expected_token2_out: u128
     ) -> Future {
         assert(lp_tokens_to_burn > 0u128);
+        assert(expected_token1_out >= min_token1_out);
+        assert(expected_token2_out >= min_token2_out);
 
         // Get caller address outside async block
         let caller_address: address = self.caller;
@@ -323,47 +389,68 @@ program whisper_waffle_swap_v1.aleo {
         // Generate pool ID
         let pool_id: field = get_pool_id(token1_id, token2_id);
 
-        // Transfer token1 FROM program TO user
-        let token1_future: Future = token_registry.aleo/transfer_public(token1_id, caller_address, min_token1_out);
+        let payout_low_future: Future = token_registry.aleo/transfer_public(token1_id, caller_address, expected_token1_out);
+        let payout_high_future: Future = token_registry.aleo/transfer_public(token2_id, caller_address, expected_token2_out);
         
-        // Transfer token2 FROM program TO user
-        let token2_future: Future = token_registry.aleo/transfer_public(token2_id, caller_address, min_token2_out);
-        
-        // Return the futures and call finalize function
-        return finalize_remove_liquidity(token1_future, token2_future, pool_id, caller_address, lp_tokens_to_burn, min_token1_out, min_token2_out);
+        return finalize_remove_liquidity(
+            payout_low_future,
+            payout_high_future,
+            pool_id,
+            caller_address,
+            token1_id,
+            token2_id,
+            lp_tokens_to_burn,
+            expected_token1_out,
+            expected_token2_out,
+            min_token1_out,
+            min_token2_out,
+            expected_token1_out,
+            expected_token2_out
+        );
     }
 
     // Swap native ALEO for token using AMM pricing
     async transition swap_aleo_for_token(
         public token_id: field,
         public aleo_in: u128,
-        public min_token_out: u128
+        public min_token_out: u128,
+        public expected_token_out: u128
     ) -> Future {
         assert(aleo_in > 0u128);
+        assert(expected_token_out >= min_token_out);
 
         // Get caller address outside async block
         let caller_address: address = self.caller;
 
         // Generate pool ID
         let pool_id: field = get_pool_id(NATIVE_ALEO_ID, token_id);
-
-        // Transfer ALEO FROM user TO program
         let aleo_future: Future = credits.aleo/transfer_public_as_signer(self.address, (aleo_in as u64));
+        let token_future: Future = token_registry.aleo/transfer_public(token_id, caller_address, expected_token_out);
         
-        // Transfer token FROM program TO user
-        let token_future: Future = token_registry.aleo/transfer_public(token_id, caller_address, min_token_out);
-        
-        // Return the futures and call finalize function
-        return finalize_swap_token1_for_token2(aleo_future, token_future, pool_id, caller_address, NATIVE_ALEO_ID, token_id, aleo_in, min_token_out);
+        // Finalize swap
+        return finalize_swap_token_output(
+            aleo_future,
+            token_future,
+            pool_id,
+            caller_address,
+            NATIVE_ALEO_ID,
+            token_id,
+            aleo_in,
+            expected_token_out,
+            min_token_out,
+            expected_token_out
+        );
     }
 
     // Swap token for native ALEO using AMM pricing
     async transition swap_token_for_aleo(
         public token_id: field,
         public token_in: u128,
-        public min_aleo_out: u128
+        public min_aleo_out: u128,
+        public expected_aleo_out: u128
     ) -> Future {
         assert(token_in > 0u128);
+        assert(expected_aleo_out >= min_aleo_out);
 
         // Get caller address outside async block
         let caller_address: address = self.caller;
@@ -373,12 +460,20 @@ program whisper_waffle_swap_v1.aleo {
 
         // Transfer token FROM user TO program
         let token_future: Future = token_registry.aleo/transfer_public_as_signer(token_id, self.address, token_in);
+        assert(expected_aleo_out <= 18446744073709551615u128);
+        let aleo_future: Future = credits.aleo/transfer_public(caller_address, (expected_aleo_out as u64));
         
-        // Transfer ALEO FROM program TO user
-        let aleo_future: Future = credits.aleo/transfer_public(caller_address, (min_aleo_out as u64));
-        
-        // Return the futures and call finalize function
-        return finalize_swap_token1_for_token2(token_future, aleo_future, pool_id, caller_address, token_id, NATIVE_ALEO_ID, token_in, min_aleo_out);
+        return finalize_swap_aleo_output(
+            token_future,
+            aleo_future,
+            pool_id,
+            caller_address,
+            token_id,
+            token_in,
+            expected_aleo_out,
+            min_aleo_out,
+            expected_aleo_out
+        );
     }
 
     // Swap token1 for token2 using AMM pricing
@@ -386,9 +481,11 @@ program whisper_waffle_swap_v1.aleo {
         public token1_id: field,
         public token2_id: field,
         public token1_in: u128,
-        public min_token2_out: u128
+        public min_token2_out: u128,
+        public expected_token2_out: u128
     ) -> Future {
         assert(token1_in > 0u128);
+        assert(expected_token2_out >= min_token2_out);
 
         // Get caller address outside async block
         let caller_address: address = self.caller;
@@ -398,45 +495,98 @@ program whisper_waffle_swap_v1.aleo {
 
         // Transfer token1 FROM user TO program
         let token1_future: Future = token_registry.aleo/transfer_public_as_signer(token1_id, self.address, token1_in);
+
+        let token2_future: Future = token_registry.aleo/transfer_public(token2_id, caller_address, expected_token2_out);
         
-        // Transfer token2 FROM program TO user
-        let token2_future: Future = token_registry.aleo/transfer_public(token2_id, caller_address, min_token2_out);
-        
-        // Return the futures and call finalize function
-        return finalize_swap_token1_for_token2(token1_future, token2_future, pool_id, caller_address, token1_id, token2_id, token1_in, min_token2_out);
+        return finalize_swap_token_output(
+            token1_future,
+            token2_future,
+            pool_id,
+            caller_address,
+            token1_id,
+            token2_id,
+            token1_in,
+            expected_token2_out,
+            min_token2_out,
+            expected_token2_out
+        );
     }
 
     // Finalize: Handle liquidity addition and state updates
     async function finalize_add_liquidity(
-        token1_future: Future,
-        token2_future: Future,
+        future_a: Future,
+        future_b: Future,
         pool_id: field,
         caller_address: address,
-        token1_amount: u128,
-        token2_amount: u128,
+        token_low_id: field,
+        token_high_id: field,
+        amount_low: u128,
+        amount_high: u128,
         min_lp: u128
     ) {
-        // Await both token transfers
-        token1_future.await();
-        token2_future.await();
+        future_a.await();
+        future_b.await();
 
         // Load pool
-        let current_pool: PoolInfo = Mapping::get_or_use(
-            pools,
-            pool_id,
-            PoolInfo { id: 0field, token1_id: 0field, token2_id: 0field, reserve1: 0u128, reserve2: 0u128, lp_total_supply: 0u128, swap_fee: 0u16, pool_type: 0u8 }
-        );
+        let pool_exists_flag: bool = Mapping::get_or_use(pool_exists, pool_id, false);
+        assert(pool_exists_flag);
+
+        let current_pool: PoolInfo = Mapping::get(pools, pool_id);
         assert(current_pool.id != 0field);
+        assert(current_pool.token1_id == token_low_id);
+        assert(current_pool.token2_id == token_high_id);
 
-        // Calculate proportional LP tokens to mint
-        let lp_from_token1: u128 = (token1_amount * current_pool.lp_total_supply) / current_pool.reserve1;
-        let lp_from_token2: u128 = (token2_amount * current_pool.lp_total_supply) / current_pool.reserve2;
-        let lp_to_mint: u128 = lp_from_token2 < lp_from_token1 ? lp_from_token2 : lp_from_token1;
+        if current_pool.lp_total_supply == 0u128 {
+            assert(current_pool.reserve1 == 0u128);
+            assert(current_pool.reserve2 == 0u128);
+            let product: u128 = amount_low * amount_high;
+            let lp_to_mint: u128 = sqrt_approx(product);
+            assert(lp_to_mint >= min_lp);
+
+            let updated_bootstrap: PoolInfo = PoolInfo {
+                id: current_pool.id,
+                token1_id: current_pool.token1_id,
+                token2_id: current_pool.token2_id,
+                reserve1: amount_low,
+                reserve2: amount_high,
+                lp_total_supply: lp_to_mint,
+                swap_fee: current_pool.swap_fee,
+                pool_type: current_pool.pool_type,
+            };
+            Mapping::set(pools, pool_id, updated_bootstrap);
+
+            let position_key_bootstrap: field = get_position_key(caller_address, pool_id);
+            let user_position_bootstrap: LiquidityPosition = Mapping::get_or_use(
+                liquidity_positions,
+                position_key_bootstrap,
+                LiquidityPosition {
+                    user_address: caller_address,
+                    pool_id: pool_id,
+                    lp_tokens: 0u128,
+                    timestamp: 0u64,
+                }
+            );
+            let new_lp_tokens_bootstrap: u128 = user_position_bootstrap.lp_tokens + lp_to_mint;
+            let updated_position_bootstrap: LiquidityPosition = LiquidityPosition {
+                user_address: caller_address,
+                pool_id: pool_id,
+                lp_tokens: new_lp_tokens_bootstrap,
+                timestamp: 0u64,
+            };
+            Mapping::set(liquidity_positions, position_key_bootstrap, updated_position_bootstrap);
+            return;
+        }
+
+        assert(current_pool.reserve1 > 0u128);
+        assert(current_pool.reserve2 > 0u128);
+        let lp_from_token_low: u128 = (amount_low * current_pool.lp_total_supply) / current_pool.reserve1;
+        let lp_from_token_high: u128 = (amount_high * current_pool.lp_total_supply) / current_pool.reserve2;
+        let lp_to_mint: u128 = lp_from_token_high < lp_from_token_low ? lp_from_token_high : lp_from_token_low;
         assert(lp_to_mint >= min_lp);
+        assert(lp_to_mint > 0u128);
 
-        // Update reserves and LP
-        let new_reserve1: u128 = current_pool.reserve1 + token1_amount;
-        let new_reserve2: u128 = current_pool.reserve2 + token2_amount;
+        let new_reserve1: u128 = current_pool.reserve1 + amount_low;
+        let new_reserve2: u128 = current_pool.reserve2 + amount_high;
         let new_lp_total: u128 = current_pool.lp_total_supply + lp_to_mint;
 
         let updated: PoolInfo = PoolInfo {
@@ -473,43 +623,59 @@ program whisper_waffle_swap_v1.aleo {
         };
 
         Mapping::set(liquidity_positions, position_key, updated_position);
+
     }
 
     // Finalize: Handle liquidity removal and state updates
     async function finalize_remove_liquidity(
-        wrapped_aleo_future: Future,
-        token_future: Future,
+        payout_low_future: Future,
+        payout_high_future: Future,
         pool_id: field,
         caller_address: address,
+        token_low_id: field,
+        token_high_id: field,
         lp_tokens_to_burn: u128,
-        min_wrapped_aleo_out: u128,
-        min_token_out: u128
+        low_out: u128,
+        high_out: u128,
+        min_low_out: u128,
+        min_high_out: u128,
+        user_expected_low: u128,
+        user_expected_high: u128
     ) {
-        // Await both token transfers
-        wrapped_aleo_future.await();
-        token_future.await();
+        let pool_exists_flag: bool = Mapping::get_or_use(pool_exists, pool_id, false);
+        assert(pool_exists_flag);
 
-        let current_pool: PoolInfo = Mapping::get_or_use(
-            pools,
-            pool_id,
-            PoolInfo { id: 0field, token1_id: 0field, token2_id: 0field, reserve1: 0u128, reserve2: 0u128, lp_total_supply: 0u128, swap_fee: 0u16, pool_type: 0u8 }
-        );
+        let current_pool: PoolInfo = Mapping::get(pools, pool_id);
         assert(current_pool.id != 0field);
+        assert(current_pool.token1_id == token_low_id);
+        assert(current_pool.token2_id == token_high_id);
+        assert(lp_tokens_to_burn > 0u128);
+        assert(current_pool.lp_total_supply >= lp_tokens_to_burn);
 
-        // Calculate proportional amounts to return
-        let wrapped_aleo_out: u128 = (current_pool.reserve1 * lp_tokens_to_burn) / current_pool.lp_total_supply;
-        let token_out: u128 = (current_pool.reserve2 * lp_tokens_to_burn) / current_pool.lp_total_supply;
+        let computed_low: u128 = (current_pool.reserve1 * lp_tokens_to_burn) / current_pool.lp_total_supply;
+        let computed_high: u128 = (current_pool.reserve2 * lp_tokens_to_burn) / current_pool.lp_total_supply;
 
-        // Ensure minimum outputs (slippage protection)
-        assert(wrapped_aleo_out >= min_wrapped_aleo_out);
-        assert(token_out >= min_token_out);
+        assert(computed_low >= min_low_out);
+        assert(computed_high >= min_high_out);
+        assert(low_out >= min_low_out);
+        assert(high_out >= min_high_out);
 
-        // Update pool reserves - subtract the calculated amounts (what user should get)
-        // The transfers were done with minimum amounts, but we need to subtract calculated amounts
-        // to ensure proper accounting. The difference (if any) between calculated and minimum
-        // is part of slippage protection and stays in the pool.
-        let new_reserve1: u128 = current_pool.reserve1 - wrapped_aleo_out;
-        let new_reserve2: u128 = current_pool.reserve2 - token_out;
+        if user_expected_low > 0u128 {
+            let max_low: u128 = (computed_low * 101u128) / 100u128;
+            assert(user_expected_low <= max_low);
+        }
+        if user_expected_high > 0u128 {
+            let max_high: u128 = (computed_high * 101u128) / 100u128;
+            assert(user_expected_high <= max_high);
+        }
+
+        assert(low_out <= computed_low);
+        assert(high_out <= computed_high);
+        assert(current_pool.reserve1 >= low_out);
+        assert(current_pool.reserve2 >= high_out);
+
+        let new_reserve1: u128 = current_pool.reserve1 - low_out;
+        let new_reserve2: u128 = current_pool.reserve2 - high_out;
         let new_lp_total: u128 = current_pool.lp_total_supply - lp_tokens_to_burn;
 
         let updated_pool: PoolInfo = PoolInfo {
@@ -524,7 +690,6 @@ program whisper_waffle_swap_v1.aleo {
         };
         Mapping::set(pools, pool_id, updated_pool);
 
-        // Update user's LP position
         let position_key: field = get_position_key(caller_address, pool_id);
         let user_position: LiquidityPosition = Mapping::get_or_use(
             liquidity_positions,
@@ -536,8 +701,6 @@ program whisper_waffle_swap_v1.aleo {
                 timestamp: 0u64,
             }
         );
-
-        // Validate user has enough LP tokens to burn
         assert(user_position.lp_tokens >= lp_tokens_to_burn);
 
         let new_lp_tokens: u128 = user_position.lp_tokens - lp_tokens_to_burn;
@@ -548,55 +711,134 @@ program whisper_waffle_swap_v1.aleo {
             timestamp: 0u64,
         };
         Mapping::set(liquidity_positions, position_key, updated_position);
+
+        if token_low_id == NATIVE_ALEO_ID {
+            assert(low_out <= 18446744073709551615u128);
+        }
+        if token_high_id == NATIVE_ALEO_ID {
+            assert(high_out <= 18446744073709551615u128);
+        }
+
+        payout_low_future.await();
+        payout_high_future.await();
     }
 
     // Finalize: Handle swap calculations and state updates for token1 to token2
-    async function finalize_swap_token1_for_token2(
-        token1_future: Future,
-        token2_future: Future,
+    async function finalize_swap_token_output(
+        incoming_future: Future,
+        outgoing_future: Future,
         pool_id: field,
         caller: address,
-        token1_id: field,
-        token2_id: field,
-        token1_in: u128,
-        min_token2_out: u128
+        input_token_id: field,
+        output_token_id: field,
+        amount_in: u128,
+        amount_out: u128,
+        min_amount_out: u128,
+        user_expected_out: u128
     ) {
-        token1_future.await();
-        token2_future.await();
+        incoming_future.await();
         
-        // Load pool
+        let pool_exists_flag: bool = Mapping::get_or_use(pool_exists, pool_id, false);
+        assert(pool_exists_flag);
+
         let pool: PoolInfo = Mapping::get(pools, pool_id);
+        assert(pool.id != 0field);
         
-        // Determine which reserve is which
-        let is_token1_first: bool = pool.token1_id == token1_id;
-        let reserve_in: u128 = is_token1_first ? pool.reserve1 : pool.reserve2;
-        let reserve_out: u128 = is_token1_first ? pool.reserve2 : pool.reserve1;
+        let input_is_low: bool = pool.token1_id == input_token_id;
+        let output_is_low: bool = pool.token1_id == output_token_id;
+        assert(input_is_low || pool.token2_id == input_token_id);
+        assert(output_is_low || pool.token2_id == output_token_id);
+        assert(input_token_id != output_token_id);
         
-        // Calculate output using x*y=k
-        let token2_out: u128 = get_amount_out(token1_in, reserve_in, reserve_out, pool.swap_fee);
-        assert(token2_out >= min_token2_out);
+        let reserve_in: u128 = input_is_low ? pool.reserve1 : pool.reserve2;
+        let reserve_out: u128 = input_is_low ? pool.reserve2 : pool.reserve1;
+        assert(reserve_out > 0u128);
         
-        // Update reserves
-        let new_reserve1: u128 = is_token1_first ? (pool.reserve1 + token1_in) : (pool.reserve1 - token2_out);
-        let new_reserve2: u128 = is_token1_first ? (pool.reserve2 - token2_out) : (pool.reserve2 + token1_in);
+        let computed_out: u128 = get_amount_out(amount_in, reserve_in, reserve_out, pool.swap_fee);
+        assert(computed_out >= min_amount_out);
+        assert(computed_out <= reserve_out);
         
-        // Validate k invariant
-        let old_k: u128 = pool.reserve1 * pool.reserve2;
-        let new_k: u128 = new_reserve1 * new_reserve2;
-        assert(new_k >= old_k);
+        if user_expected_out > 0u128 {
+            let max_expected: u128 = (computed_out * 101u128) / 100u128;
+            assert(user_expected_out <= max_expected);
+        }
         
-        // Update pool
+        assert(amount_out <= computed_out);
+        assert(amount_out > 0u128);
+        
+        let new_low_reserve: u128 = input_is_low ? (pool.reserve1 + amount_in) : (pool.reserve1 - amount_out);
+        let new_high_reserve: u128 = input_is_low ? (pool.reserve2 - amount_out) : (pool.reserve2 + amount_in);
+        
         let updated_pool: PoolInfo = PoolInfo {
             id: pool.id,
             token1_id: pool.token1_id,
             token2_id: pool.token2_id,
-            reserve1: new_reserve1,
-            reserve2: new_reserve2,
+            reserve1: new_low_reserve,
+            reserve2: new_high_reserve,
             lp_total_supply: pool.lp_total_supply,
             swap_fee: pool.swap_fee,
             pool_type: pool.pool_type,
         };
         Mapping::set(pools, pool_id, updated_pool);
+        
+        outgoing_future.await();
+    }
+
+    async function finalize_swap_aleo_output(
+        incoming_future: Future,
+        outgoing_future: Future,
+        pool_id: field,
+        caller: address,
+        input_token_id: field,
+        amount_in: u128,
+        amount_out: u128,
+        min_amount_out: u128,
+        user_expected_out: u128
+    ) {
+        incoming_future.await();
+        
+        let pool_exists_flag: bool = Mapping::get_or_use(pool_exists, pool_id, false);
+        assert(pool_exists_flag);
+
+        let pool: PoolInfo = Mapping::get(pools, pool_id);
+        assert(pool.id != 0field);
+        
+        let input_is_low: bool = pool.token1_id == input_token_id;
+        assert(input_is_low || pool.token2_id == input_token_id);
+        
+        let reserve_in: u128 = input_is_low ? pool.reserve1 : pool.reserve2;
+        let reserve_out: u128 = input_is_low ? pool.reserve2 : pool.reserve1;
+        assert(reserve_out > 0u128);
+        
+        let computed_out: u128 = get_amount_out(amount_in, reserve_in, reserve_out, pool.swap_fee);
+        assert(computed_out >= min_amount_out);
+        assert(computed_out <= reserve_out);
+        
+        if user_expected_out > 0u128 {
+            let max_expected: u128 = (computed_out * 101u128) / 100u128;
+            assert(user_expected_out <= max_expected);
+        }
+        
+        assert(amount_out <= computed_out);
+        assert(amount_out > 0u128);
+        assert(amount_out <= 18446744073709551615u128);
+        
+        let new_low_reserve: u128 = input_is_low ? (pool.reserve1 + amount_in) : (pool.reserve1 - amount_out);
+        let new_high_reserve: u128 = input_is_low ? (pool.reserve2 - amount_out) : (pool.reserve2 + amount_in);
+        
+        let updated_pool: PoolInfo = PoolInfo {
+            id: pool.id,
+            token1_id: pool.token1_id,
+            token2_id: pool.token2_id,
+            reserve1: new_low_reserve,
+            reserve2: new_high_reserve,
+            lp_total_supply: pool.lp_total_supply,
+            swap_fee: pool.swap_fee,
+            pool_type: pool.pool_type,
+        };
+        Mapping::set(pools, pool_id, updated_pool);
+        
+        outgoing_future.await();
     }
 
     // Finalize: Handle pool creation and state updates
@@ -622,21 +864,27 @@ program whisper_waffle_swap_v1.aleo {
         let exists: bool = Mapping::get_or_use(pool_exists, pool_id, false);
         assert(!exists);
         
+        // Canonical ordering
+        let token_low: field = token1_id < token2_id ? token1_id : token2_id;
+        let token_high: field = token1_id < token2_id ? token2_id : token1_id;
+        let amount_low: u128 = token1_id == token_low ? token1_amount : token2_amount;
+        let amount_high: u128 = token1_id == token_low ? token2_amount : token1_amount;
+        
         // Validate ratio
-        let ratio: u128 = token2_amount > token1_amount ? (token2_amount / token1_amount) : (token1_amount / token2_amount);
+        let ratio: u128 = amount_high > amount_low ? (amount_high / amount_low) : (amount_low / amount_high);
         assert(ratio <= MAX_INITIAL_RATIO);
         
         // Calculate LP tokens (geometric mean)
-        let lp: u128 = sqrt_approx(token1_amount * token2_amount);
+        let lp: u128 = sqrt_approx(amount_low * amount_high);
         assert(lp >= min_lp);
         
         // Create pool
         let pool: PoolInfo = PoolInfo {
             id: pool_id,
-            token1_id,
-            token2_id,
-            reserve1: token1_amount,
-            reserve2: token2_amount,
+            token1_id: token_low,
+            token2_id: token_high,
+            reserve1: amount_low,
+            reserve2: amount_high,
             lp_total_supply: lp,
             swap_fee,
             pool_type: 0u8,

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { CURRENT_NETWORK } from '@/types';
+import { IS_MAINNET } from '@/types';
 
 interface PositionKeyResponse {
   positionKey?: string;
@@ -30,8 +30,7 @@ export default async function handler(
     const { Hasher } = require('@doko-js/wasm');
     
     // Determine network
-    const isMainnet = CURRENT_NETWORK.toString().toLowerCase().includes('mainnet');
-    const network = isMainnet ? 'mainnet' : 'testnet';
+    const network = IS_MAINNET ? 'mainnet' : 'testnet';
 
     // Create PositionKey struct as a Leo struct string (matching the inline function in Leo)
     // Format: {user: address, pool_id: poolId}

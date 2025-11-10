@@ -1,10 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { client, programRpcClient } from '@/components/aleo/rpc';
+import { NETWORK_SUFFIX } from '@/types';
 
 // Authorized balance lookup by attempting composite key (address.public, token_id)
 // Uses authorized_balances mapping to show spendable tokens (not locked ones)
 
-const EXPLORER_BASE = 'https://api.explorer.aleo.org/v1/mainnet';
+const EXPLORER_BASE = `https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}`;
 const TOKEN_REGISTRY_PROGRAM = 'token_registry.aleo';
 
 type Data =
@@ -172,7 +173,7 @@ async function bhp256Hash(address: string, tokenId: string): Promise<string> {
     const leoStruct = `{account: ${address}, token_id: ${tokenId}}`;
     console.log('[API] Leo struct input:', leoStruct);
     
-    const hash = Hasher.hash('bhp256', leoStruct, 'field', 'mainnet');
+    const hash = Hasher.hash('bhp256', leoStruct, 'field', NETWORK_SUFFIX);
     console.log('[API] BHP256 hash result:', hash);
     return hash;
   } catch (error) {

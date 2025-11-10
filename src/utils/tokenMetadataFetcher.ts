@@ -2,6 +2,7 @@
 // Utility to fetch token metadata from curated token list and token_registry.aleo blockchain
 
 import { CURATED_TOKENS } from '@/config/tokens';
+import { NETWORK_SUFFIX } from '@/types';
 
 export interface TokenMetadata {
   tokenId: string;
@@ -17,7 +18,8 @@ export interface TokenMetadata {
 
 // Explorer endpoints to try
 const EXPLORER_ENDPOINTS = [
-  'https://api.explorer.aleo.org/v1/testnetbeta',
+  `https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}`,
+  'https://api.explorer.aleo.org/v1/mainnet',
   'https://api.explorer.aleo.org/v1/testnet',
   'https://api.explorer.aleo.org/v1',
 ];

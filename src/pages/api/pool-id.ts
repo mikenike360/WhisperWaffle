@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { CURRENT_NETWORK } from '@/types';
+import { IS_MAINNET } from '@/types';
 
 interface PoolIdResponse {
   ok: boolean;
@@ -34,9 +34,7 @@ export default async function handler(
     const { Hasher } = require('@doko-js/wasm');
     
     // Determine network for hash calculation
-    // CURRENT_NETWORK is a WalletAdapterNetwork enum, check by converting to string (case-insensitive)
-    const networkStr = CURRENT_NETWORK.toString().toLowerCase();
-    const network = networkStr.includes('mainnet') ? 'mainnet' : 'testnet';
+    const network = IS_MAINNET ? 'mainnet' : 'testnet';
     
     // Format as Leo struct: {token1: field, token2: field}
     const leoStruct = `{token1: ${orderedToken1}, token2: ${orderedToken2}}`;

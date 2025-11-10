@@ -1,7 +1,7 @@
 // swapExecutor.ts
 import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
-import { CURRENT_NETWORK, PROGRAM_ID, NATIVE_ALEO_ID } from '../types';
-import { getAmountOut, calculateMinOutput, calculatePriceImpact } from './ammCalculations';
+import { CURRENT_NETWORK, PROGRAM_ID, NATIVE_ALEO_ID, TOKEN_IDS } from '../types';
+import { getAmountOut, calculatePriceImpact } from './ammCalculations';
 
 // New AMM DEX function names
 const SWAP_ALEO_FOR_TOKEN = 'swap_aleo_for_token';
@@ -9,9 +9,22 @@ const SWAP_TOKEN_FOR_ALEO = 'swap_token_for_aleo';
 const SWAP_TOKENS = 'swap_tokens';
 const GET_SWAP_QUOTE = 'get_swap_quote';
 
+export const DEFAULT_SLIPPAGE_BPS = 500;
+export const WAFFLE_OUT_SLIPPAGE_BPS = 1;
+
+/**
+ * Resolve a default slippage tolerance (in basis points) for the given swap direction.
+ * When the pool is expected to send WAFFLE, use zero slippage so the program
+ * transfers exactly the amount it debits from reserves.
+ */
+export function getDefaultSlippageBps(tokenInId: string, tokenOutId: string): number {
+  return DEFAULT_SLIPPAGE_BPS;
+}
+
 // Interface for swap quote
 export interface SwapQuote {
   amountOut: number;
+  amountOutAtomic: bigint;
   priceImpact: number;
   fee: number;
   route: string[];
@@ -30,14 +43,17 @@ export async function swapAleoForToken(
   wallet: any,
   publicKey: string,
   tokenId: string,
-  aleoAmount: number,
-  minTokenOut: number
+  aleoAmount: bigint,
+  minTokenOut: bigint,
+  expectedTokenOut: bigint
 ): Promise<boolean> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
     }
-    
+    if (expectedTokenOut < minTokenOut) {
+      throw new Error('Expected token output is below minimum.');
+    }
     // Calculate fee (in micro credits) - updated for new AMM functions
     const fee = 100000; // 0.1 ALEO for transaction fee
     
@@ -45,6 +61,7 @@ export async function swapAleoForToken(
       tokenId,
       aleoAmount,
       minTokenOut,
+      expectedTokenOut,
       fee,
       publicKey
     });
@@ -69,9 +86,10 @@ export async function swapAleoForToken(
     // Call the AMM DEX program
     // Parameters: [token_id: field, aleo_in: u128, min_token_out: u128]
     const swapInputs = [
-      tokenId,                           // token_id: field
-      `${BigInt(aleoAmount)}u128`,       // aleo_in: u128
-      `${BigInt(minTokenOut)}u128`        // min_token_out: u128
+      tokenId,                            // token_id: field
+      `${aleoAmount.toString()}u128`,     // aleo_in: u128
+      `${minTokenOut.toString()}u128`,    // min_token_out: u128
+      `${expectedTokenOut.toString()}u128`// expected_token_out: u128
     ];
 
     console.log('Submitting AMM swap (ALEO for token):', swapInputs);
@@ -109,14 +127,17 @@ export async function swapTokenForAleo(
   wallet: any,
   publicKey: string,
   tokenId: string,
-  tokenAmount: number,
-  minAleoOut: number
+  tokenAmount: bigint,
+  minAleoOut: bigint,
+  expectedAleoOut: bigint
 ): Promise<boolean> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
     }
-    
+    if (expectedAleoOut < minAleoOut) {
+      throw new Error('Expected ALEO output is below minimum.');
+    }
     // Calculate fee (in micro credits)
     const fee = 100000; // 0.1 ALEO for transaction fee
     
@@ -124,6 +145,7 @@ export async function swapTokenForAleo(
       tokenId,
       tokenAmount,
       minAleoOut,
+      expectedAleoOut,
       fee,
       publicKey
     });
@@ -148,9 +170,10 @@ export async function swapTokenForAleo(
     // Call the AMM DEX program
     // Parameters: [token_id: field, token_in: u128, min_aleo_out: u128]
     const swapInputs = [
-      tokenId,                           // token_id: field
-      `${BigInt(tokenAmount)}u128`,      // token_in: u128
-      `${BigInt(minAleoOut)}u128`        // min_aleo_out: u128
+      tokenId,                              // token_id: field
+      `${tokenAmount.toString()}u128`,      // token_in: u128
+      `${minAleoOut.toString()}u128`,       // min_aleo_out: u128
+      `${expectedAleoOut.toString()}u128`   // expected_aleo_out: u128
     ];
 
     console.log('Submitting AMM swap (token for ALEO):', swapInputs);
@@ -190,14 +213,17 @@ export async function swapTokens(
   publicKey: string,
   token1Id: string,
   token2Id: string,
-  token1Amount: number,
-  minToken2Out: number
+  token1Amount: bigint,
+  minToken2Out: bigint,
+  expectedToken2Out: bigint
 ): Promise<boolean> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
     }
-    
+    if (expectedToken2Out < minToken2Out) {
+      throw new Error('Expected token output is below minimum.');
+    }
     // Calculate fee (in micro credits)
     const fee = 100000; // 0.1 ALEO for transaction fee
     
@@ -206,6 +232,7 @@ export async function swapTokens(
       token2Id,
       token1Amount,
       minToken2Out,
+      expectedToken2Out,
       fee,
       publicKey
     });
@@ -230,10 +257,11 @@ export async function swapTokens(
     // Call the AMM DEX program
     // Parameters: [token1_id: field, token2_id: field, token1_in: u128, min_token2_out: u128]
     const swapInputs = [
-      token1Id,                           // token1_id: field
-      token2Id,                           // token2_id: field
-      `${BigInt(token1Amount)}u128`,      // token1_in: u128
-      `${BigInt(minToken2Out)}u128`        // min_token2_out: u128
+      token1Id,                              // token1_id: field
+      token2Id,                              // token2_id: field
+      `${token1Amount.toString()}u128`,      // token1_in: u128
+      `${minToken2Out.toString()}u128`,      // min_token2_out: u128
+      `${expectedToken2Out.toString()}u128`  // expected_token2_out: u128
     ];
 
     console.log('Submitting AMM swap (token for token):', swapInputs);
@@ -270,7 +298,7 @@ export async function swapTokens(
 export function getSwapQuote(
   token1Id: string,
   token2Id: string,
-  inputAmount: number,
+  inputAmount: bigint,
   isToken1ToToken2: boolean,
   poolReserves?: { reserve1: bigint; reserve2: bigint; swapFee: number }
 ): SwapQuote | null {
@@ -279,7 +307,7 @@ export function getSwapQuote(
   }
 
   try {
-    const amountIn = BigInt(inputAmount);
+    const amountIn = inputAmount;
     const { reserve1, reserve2, swapFee = 30 } = poolReserves;
 
     // Determine which reserve is input and which is output
@@ -299,11 +327,11 @@ export function getSwapQuote(
     const denominator = reserveIn + amountInWithFee;
     
     // Calculate what the output would be
-    const amountOut = numerator / denominator;
+    const amountOutAtomic = numerator / denominator;
     
     // Check if output would exceed 99% of available reserve (leave at least 1% for pool stability)
     const maxOutput = (reserveOut * 99n) / 100n;
-    if (amountOut >= maxOutput) {
+    if (amountOutAtomic >= maxOutput) {
       return null; // Insufficient liquidity - would drain too much
     }
 
@@ -313,7 +341,7 @@ export function getSwapQuote(
       return null; // Input amount too large
     }
     
-    if (amountOut <= 0n) {
+    if (amountOutAtomic <= 0n) {
       return null;
     }
 
@@ -324,7 +352,8 @@ export function getSwapQuote(
     const feeAmount = (amountIn * BigInt(swapFee)) / 10000n;
 
     return {
-      amountOut: Number(amountOut),
+      amountOut: Number(amountOutAtomic),
+      amountOutAtomic,
       priceImpact,
       fee: Number(feeAmount),
       route: isToken1ToToken2 ? [token1Id, token2Id] : [token2Id, token1Id]

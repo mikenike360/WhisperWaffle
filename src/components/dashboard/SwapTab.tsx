@@ -3,23 +3,27 @@ import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
 import { useTokenDiscovery, TokenInfo } from '@/hooks/use-token-discovery';
-import { swapAleoForToken, swapTokenForAleo, swapTokens, getSwapQuote, calculateMinOutputWithSlippage, checkLiquidity } from '@/utils/swapExecutor';
+import { swapAleoForToken, swapTokenForAleo, swapTokens, getSwapQuote, checkLiquidity } from '@/utils/swapExecutor';
+import { getAmountOut } from '@/utils/ammCalculations';
 import { getPoolReserves } from '@/utils/poolDataFetcher';
 import { TokenSelector } from '@/components/ui/TokenSelector';
-import { NATIVE_ALEO_ID, COMMON_TOKEN_IDS } from '@/types';
+import { NATIVE_ALEO_ID, COMMON_TOKEN_IDS, TOKEN_IDS } from '@/types';
 import { fetchTokenBalance } from '@/utils/balanceFetcher';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { PriceImpactBadge } from '@/components/ui/PriceImpactBadge';
 import { SuccessAnimation } from '@/components/ui/SuccessAnimation';
+import { useSettings } from '@/context/SettingsContext';
 
 // Helper functions
 const toAtomic = (amt: string, decimals: number): bigint => {
   if (!amt) return BigInt(0);
-  const [intPart, fracRaw] = amt.split('.');
-  const frac = (fracRaw || '').slice(0, decimals).padEnd(decimals, '0');
-  const s = `${intPart || '0'}${frac}`.replace(/0+(?=\d)/, '');
-  return BigInt(s || '0');
+  const [intPartRaw, fracRaw = ''] = amt.split('.');
+  const intPart = intPartRaw && intPartRaw.length ? BigInt(intPartRaw) : 0n;
+  const wholeMultiplier = 10n ** BigInt(decimals);
+  const frac = fracRaw.slice(0, decimals).padEnd(decimals, '0');
+  const fractionalPart = frac.length ? BigInt(frac) : 0n;
+  return intPart * wholeMultiplier + fractionalPart;
 };
 
 const fromAtomic = (amt: bigint, decimals: number): string => {
@@ -45,6 +49,9 @@ interface SwapTabProps {}
 
 const SwapTab: React.FC<SwapTabProps> = () => {
   const { publicKey, wallet } = useWallet();
+  const { slippageBps } = useSettings();
+  const slippagePercent = useMemo(() => slippageBps / 100, [slippageBps]);
+  const slippageFactor = useMemo(() => BigInt(10000 - slippageBps), [slippageBps]);
   const [fromToken, setFromToken] = useState<TokenInfo | null>(null);
   const [toToken, setToToken] = useState<TokenInfo | null>(null);
   const [fromAmount, setFromAmount] = useState('');
@@ -52,6 +59,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   const [poolReserves, setPoolReserves] = useState<{ reserve1: bigint; reserve2: bigint; swapFee: number; token1Id: string; token2Id: string } | null>(null);
   const [liquidityError, setLiquidityError] = useState<string | null>(null);
   const tokensInitialized = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Hooks
   const { poolData, loading: poolLoading, error: poolError, refreshPoolData } = usePoolData();
@@ -125,7 +133,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       if (aleoToken) {
         setFromToken(aleoToken);
         // Set WAFFLE as default to token
-        const waffleToken = tokens.find(token => token.id === '42069666field');
+        const waffleToken = tokens.find(token => token.id === TOKEN_IDS.WAFFLE);
         if (waffleToken) {
           setToToken(waffleToken);
         } else {
@@ -147,26 +155,61 @@ const SwapTab: React.FC<SwapTabProps> = () => {
     setToAmount('');
   }, [fromToken?.id, toToken?.id]);
 
-  // Fetch pool reserves when tokens change
-  useEffect(() => {
-    const fetchPoolReserves = async () => {
-      if (fromToken && toToken && fromToken.id !== toToken.id) {
-        console.log('[SwapTab] Fetching pool reserves for:', fromToken.id, '->', toToken.id);
-        try {
-          const reserves = await getPoolReserves(fromToken.id, toToken.id);
-          console.log('[SwapTab] Got pool reserves:', reserves);
-          setPoolReserves(reserves);
-        } catch (error) {
-          console.error('[SwapTab] Error fetching pool reserves:', error);
-          setPoolReserves(null);
-        }
-      } else {
+  const loadPoolReserves = useCallback(
+    async (context: string = 'manual') => {
+      if (!fromToken || !toToken || fromToken.id === toToken.id) {
+        setPoolReserves(null);
+        return;
+      }
+
+      console.log(`[SwapTab] Fetching pool reserves (${context}) for:`, fromToken.id, '->', toToken.id);
+      try {
+        const reserves = await getPoolReserves(fromToken.id, toToken.id);
+        console.log('[SwapTab] Got pool reserves:', reserves);
+        setPoolReserves(reserves);
+      } catch (error) {
+        console.error(`[SwapTab] Error fetching pool reserves (${context}):`, error);
         setPoolReserves(null);
       }
+    },
+    [fromToken?.id, toToken?.id]
+  );
+
+  // Fetch pool reserves when tokens change
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (cancelled) return;
+      await loadPoolReserves('token-change');
     };
-    
-    fetchPoolReserves();
-  }, [fromToken?.id, toToken?.id]);
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPoolReserves]);
+
+  // Periodically refresh pool reserves to keep quotes current
+  useEffect(() => {
+    if (refreshTimerRef.current) {
+      clearInterval(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+
+    if (!fromToken || !toToken || fromToken.id === toToken.id) {
+      return;
+    }
+
+    refreshTimerRef.current = setInterval(() => {
+      loadPoolReserves('auto-refresh');
+    }, 7000);
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [fromToken?.id, toToken?.id, loadPoolReserves]);
 
   // AMM quote calculation using dynamic pricing
   const quote = useMemo(() => {
@@ -181,9 +224,8 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       // Convert fromAmount (in whole units like "1" ALEO) to atomic units (microcredits)
       // For ALEO: 6 decimals, so 1 ALEO = 1_000_000 microcredits
       // For tokens: typically 6 decimals
-      const amountInWhole = Number(fromAmount);
       const decimals = fromToken?.decimals || 6;
-      const amountInAtomic = Math.floor(amountInWhole * Math.pow(10, decimals));
+      const amountInAtomic = toAtomic(fromAmount, decimals);
       
       let isToken1ToToken2 = true;
       if (poolReserves) {
@@ -202,8 +244,8 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       }
       
       console.log('[SwapTab] Calling getSwapQuote with:', { 
-        amountInWhole, 
-        amountInAtomic,
+        amountInWhole: Number(fromAmount),
+        amountInAtomic: amountInAtomic.toString(),
         decimals,
         isToken1ToToken2, 
         reserve1: poolReserves.reserve1.toString(), 
@@ -221,10 +263,10 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       
       console.log('[SwapTab] getSwapQuote returned:', swapQuote);
       
-      if (!swapQuote || swapQuote.amountOut <= 0) {
+      if (!swapQuote || swapQuote.amountOutAtomic <= 0n) {
         console.log('[SwapTab] Invalid swap quote');
         // If we have an amount but no quote, it's likely a liquidity issue
-        if (amountInAtomic > 0) {
+        if (amountInAtomic > 0n) {
           return { error: 'Insufficient liquidity: Not enough tokens in pool' };
         }
         return null;
@@ -232,10 +274,11 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       
       // Convert output from atomic units back to whole units for display
       const toDecimals = toToken?.decimals || 6;
-      const amountOutWhole = swapQuote.amountOut / Math.pow(10, toDecimals);
+      const amountOutWhole = fromAtomic(swapQuote.amountOutAtomic, toDecimals);
       
       return {
-        amountOut: amountOutWhole.toFixed(6),
+        amountOut: amountOutWhole,
+        amountOutAtomic: swapQuote.amountOutAtomic,
         priceImpact: swapQuote.priceImpact,
         fee: swapQuote.fee,
         route: swapQuote.route
@@ -293,33 +336,108 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       setIsSwapping(true);
       setSwapStatus('Preparing swap...');
       
-      const amountIn = Number(fromAmount);
-      if (amountIn <= 0) throw new Error('Invalid input amount');
+      const amountInAtomic = toAtomic(fromAmount, fromToken.decimals);
+      if (amountInAtomic <= 0n) {
+        throw new Error('Invalid input amount');
+      }
       
-      // Calculate minimum output with slippage protection
-      const expectedOutput = Number(toAmount);
-      const minOutput = calculateMinOutputWithSlippage(expectedOutput, 500); // 5% slippage
-      
-      // Convert to atomic units
-      const amountInAtomic = Math.floor(amountIn * Math.pow(10, fromToken.decimals));
-      const minOutputAtomic = Math.floor(minOutput * Math.pow(10, toToken.decimals));
+      if (!poolReserves) {
+        throw new Error('Pool reserves unavailable');
+      }
+      const latestReserves = await getPoolReserves(fromToken.id, toToken.id);
+      if (!latestReserves) {
+        throw new Error('Failed to refresh pool reserves');
+      }
+      setPoolReserves(latestReserves);
+      const effectiveReserves = latestReserves;
+ 
+      let isToken1ToToken2 = true;
+      if (effectiveReserves.token1Id === fromToken.id && effectiveReserves.token2Id === toToken.id) {
+        isToken1ToToken2 = true;
+      } else if (effectiveReserves.token1Id === toToken.id && effectiveReserves.token2Id === fromToken.id) {
+        isToken1ToToken2 = false;
+      } else {
+        // Fallback to previous determination in quote
+        isToken1ToToken2 = true;
+      }
+       
+      const reserveIn = isToken1ToToken2 ? effectiveReserves.reserve1 : effectiveReserves.reserve2;
+      const reserveOut = isToken1ToToken2 ? effectiveReserves.reserve2 : effectiveReserves.reserve1;
+       
+      const outputAtomic = getAmountOut(amountInAtomic, reserveIn, reserveOut, poolReserves.swapFee);
+      if (outputAtomic <= 0n) {
+        throw new Error('Insufficient liquidity for swap');
+      }
+
+      const slippageBpsBigInt = BigInt(slippageBps);
+      const slippageDiscount = slippageBpsBigInt > 0n
+        ? (outputAtomic * slippageBpsBigInt + 9999n) / 10000n
+        : 0n;
+      let executionOutputAtomic = outputAtomic > slippageDiscount
+        ? outputAtomic - slippageDiscount
+        : 0n;
+
+      if (executionOutputAtomic <= 0n && outputAtomic > 0n) {
+        executionOutputAtomic = outputAtomic;
+      }
+      if (executionOutputAtomic > outputAtomic) {
+        executionOutputAtomic = outputAtomic;
+      }
+
+      console.log('[SwapTab] Prepared swap payload', {
+        fromToken: { id: fromToken.id, symbol: fromToken.symbol },
+        toToken: { id: toToken.id, symbol: toToken.symbol },
+        aleoIn: fromToken.id === NATIVE_ALEO_ID ? amountInAtomic.toString() : undefined,
+        tokenIn: fromToken.id !== NATIVE_ALEO_ID ? amountInAtomic.toString() : undefined,
+        poolId: `${fromToken.id}-${toToken.id}`,
+        poolReserves,
+        reserveIn: reserveIn.toString(),
+        reserveOut: reserveOut.toString(),
+        swapFee: poolReserves.swapFee,
+        quotedOut: outputAtomic.toString(),
+        executionOut: executionOutputAtomic.toString(),
+        slippageBps,
+        priceImpact: quote && !('error' in quote) ? quote.priceImpact : null
+      });
       
       let success = false;
       
       if (fromToken.id === NATIVE_ALEO_ID && toToken.id !== NATIVE_ALEO_ID) {
         // ALEO → Token
         setSwapStatus('Executing ALEO to Token swap...');
-        success = await swapAleoForToken(wallet, publicKey.toString(), toToken.id, amountInAtomic, minOutputAtomic);
+        success = await swapAleoForToken(
+          wallet,
+          publicKey.toString(),
+          toToken.id,
+          amountInAtomic,
+          executionOutputAtomic,
+          executionOutputAtomic
+        );
         
       } else if (fromToken.id !== NATIVE_ALEO_ID && toToken.id === NATIVE_ALEO_ID) {
         // Token → ALEO
         setSwapStatus('Executing Token to ALEO swap...');
-        success = await swapTokenForAleo(wallet, publicKey.toString(), fromToken.id, amountInAtomic, minOutputAtomic);
+        success = await swapTokenForAleo(
+          wallet,
+          publicKey.toString(),
+          fromToken.id,
+          amountInAtomic,
+          executionOutputAtomic,
+          executionOutputAtomic
+        );
         
       } else if (fromToken.id !== NATIVE_ALEO_ID && toToken.id !== NATIVE_ALEO_ID) {
         // Token → Token
         setSwapStatus('Executing Token to Token swap...');
-        success = await swapTokens(wallet, publicKey.toString(), fromToken.id, toToken.id, amountInAtomic, minOutputAtomic);
+        success = await swapTokens(
+          wallet,
+          publicKey.toString(),
+          fromToken.id,
+          toToken.id,
+          amountInAtomic,
+          executionOutputAtomic,
+          executionOutputAtomic
+        );
         
       } else {
         throw new Error('Cannot swap ALEO to ALEO');
@@ -348,7 +466,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
     } finally {
       setIsSwapping(false);
     }
-  }, [publicKey, wallet, fromToken, toToken, fromAmount, toAmount, refreshBalances, refreshPoolData]);
+  }, [publicKey, wallet, fromToken, toToken, fromAmount, refreshBalances, refreshPoolData, poolReserves, slippageFactor, slippageBps, quote]);
 
   // Helper function to get balance for a token
   const getBalance = (symbol: string, tokenId?: string): number => {
@@ -377,14 +495,20 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   const hasValidQuote = quote && !('error' in quote);
   const loadingQuote = !quote && fromAmount && Number(fromAmount) > 0 && poolReserves !== null && !liquidityError;
   const hasBalance = fromToken ? getBalance(fromToken.symbol, fromToken.id) >= Number(fromAmount || 0) : false;
-  const canSwap = publicKey && fromAmount && Number(fromAmount) > 0 && fromToken && toToken && fromToken.id !== toToken.id && hasBalance && hasValidQuote && !liquidityError && poolReserves !== null;
+  const priceImpactTooHigh = useMemo(() => {
+    if (!quote || 'error' in quote) return false;
+    return quote.priceImpact > slippagePercent;
+  }, [quote, slippagePercent]);
+  const canSwap = publicKey && fromAmount && Number(fromAmount) > 0 && fromToken && toToken && fromToken.id !== toToken.id && hasBalance && hasValidQuote && !liquidityError && poolReserves !== null && !priceImpactTooHigh;
 
   const minReceived = useMemo(() => {
     if (!hasValidQuote) return '-';
-    const out = Number(quote.amountOut || '0');
-    const min = calculateMinOutputWithSlippage(out, 500); // 5% slippage
-    return fmtNumber(min);
-  }, [quote, hasValidQuote]);
+    if (!toToken) return '-';
+    const outAtomic = quote.amountOutAtomic;
+    const minAtomic = (outAtomic * slippageFactor) / 10000n;
+    const minDisplayRaw = fromAtomic(minAtomic, toToken.decimals);
+    return fmtNumber(minDisplayRaw);
+  }, [quote, hasValidQuote, fromToken?.id, toToken, slippageFactor]);
 
   const priceImpactStr = useMemo(() => {
     if (!hasValidQuote) return '0.00%';
@@ -452,6 +576,13 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       {liquidityError && fromAmount && Number(fromAmount) > 0 && (
         <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center text-red-800 text-sm">
           ⚠️ {liquidityError}
+        </div>
+      )}
+
+      {priceImpactTooHigh && quote && !('error' in quote) && (
+        <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center text-red-800 text-sm">
+          ⚠️ Price impact ({quote.priceImpact.toFixed(2)}%) exceeds your slippage tolerance ({slippagePercent.toFixed(2)}%).
+          Reduce trade size or adjust slippage in Settings.
         </div>
       )}
 
@@ -658,6 +789,8 @@ const SwapTab: React.FC<SwapTabProps> = () => {
           </>
         ) : liquidityError ? (
           'Insufficient Liquidity'
+        ) : priceImpactTooHigh ? (
+          'Adjust Slippage'
         ) : !poolExists ? (
           'Pool Not Found'
         ) : poolEmpty ? (

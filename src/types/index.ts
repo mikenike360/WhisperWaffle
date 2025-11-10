@@ -5,10 +5,12 @@ import { WalletAdapterNetwork } from '@demox-labs/aleo-wallet-adapter-base';
 //Change to MainnetBeta for mainnet or TestnetBeta for testnet
 export const CURRENT_NETWORK: WalletAdapterNetwork = WalletAdapterNetwork.MainnetBeta;
 
-
 //TESTNET_RPC_URL=https://testnetbeta.aleorpc.com
 //MAINNET_RPC_URL=https://mainnet.aleorpc.com
 export const CURRENT_RPC_URL = "https://mainnet.aleorpc.com";
+
+export const IS_MAINNET = CURRENT_NETWORK === WalletAdapterNetwork.MainnetBeta;
+export const NETWORK_SUFFIX = IS_MAINNET ? 'mainnet' : 'testnet';
 
 export type NextPageWithLayout<P = {}> = NextPage<P> & {
   authorization?: boolean;
@@ -37,7 +39,7 @@ export type BountyData = {
 };
 
 // Program ID - automatically read from Leo source
-export const PROGRAM_ID = 'whisper_waffle_swap_v1.aleo'; // Mainnet program name
+export const PROGRAM_ID = 'whisper_waffle_swap_v4.aleo'; // Mainnet program name
 
 // Native ALEO ID (field = 0field)
 export const NATIVE_ALEO_ID = '0field';
@@ -50,7 +52,11 @@ export const TOKEN_IDS = {
   vUSDC: '3field',     // Update with actual IDs
   vUSDT: '4field',     // Update with actual IDs
   RATS: '5field',      // Update with actual IDs
-  WAFFLE: '42069666field',
+  WAFFLE: '42field',
+} as const;
+
+export const LEGACY_TOKEN_IDS = {
+  WAFFLE: '42069666360187field',
 } as const;
 
 // Common token IDs for balance fetching

@@ -63,7 +63,7 @@ export const CURATED_TOKENS: CuratedToken[] = [
     verified: true,
   },
   {
-    id: '42069666field', // Updated Waffle token ID
+    id: '42field', // Updated Waffle token ID
     symbol: 'WAFFLE',
     name: 'Waffle Token',
     decimals: 6,

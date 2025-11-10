@@ -6,6 +6,7 @@ import Head from 'next/head';
 import { Hydrate, QueryClient, QueryClientProvider } from 'react-query';
 import { ReactQueryDevtools } from 'react-query/devtools';
 import { ThemeProvider } from 'next-themes';
+import { SettingsProvider } from '@/context/SettingsContext';
 
 // Import Aleo Wallet Adapter dependencies
 import { WalletProvider } from '@demox-labs/aleo-wallet-adapter-react';
@@ -56,7 +57,9 @@ function CustomApp({ Component, pageProps }: AppPropsWithLayout) {
           >
             <WalletModalProvider>
               <ThemeProvider attribute="data-theme" enableSystem={true} defaultTheme="cyberpunk">
-                {getLayout(<Component {...pageProps} />)}
+                <SettingsProvider>
+                  {getLayout(<Component {...pageProps} />)}
+                </SettingsProvider>
               </ThemeProvider>
             </WalletModalProvider>
           </WalletProvider>

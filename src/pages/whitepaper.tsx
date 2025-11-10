@@ -401,7 +401,7 @@ const WhitepaperPage: NextPageWithLayout = () => {
                     <li><strong>Website:</strong> whisperwaffle.com</li>
                     <li><strong>Email:</strong> contact@venomlabs.xyz</li>
                     <li><strong>GitHub:</strong> github.com/mikenike360</li>
-                    <li><strong>Smart Contract:</strong> whisper_waffle_swap_v1.aleo (Aleo Mainnet)</li>
+                    <li><strong>Smart Contract:</strong> whisper_waffle_swap_v3.aleo (Aleo Mainnet)</li>
                   </ul>
                 </div>
 

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { PROGRAM_ID, CURRENT_NETWORK } from '@/types';
+import { PROGRAM_ID, CURRENT_RPC_URL, IS_MAINNET, NETWORK_SUFFIX } from '@/types';
 
 interface TestPoolResponse {
   ok: boolean;
@@ -14,24 +14,23 @@ const candidateUrls = (programId: string, mapping: string, key?: string) => {
   const urls: string[] = [];
   const keySuffix = key ? `/${key}` : '';
   
-  // CURRENT_NETWORK is a WalletAdapterNetwork enum, check by converting to string (case-insensitive)
-  const networkStr = CURRENT_NETWORK.toString().toLowerCase();
-  const isMainnet = networkStr.includes('mainnet');
-  const networkSuffix = isMainnet ? 'mainnet' : 'testnetbeta';
-  
-  console.log(`[test-pool candidateUrls] CURRENT_NETWORK: ${CURRENT_NETWORK} (${typeof CURRENT_NETWORK}), networkStr: ${networkStr}, isMainnet: ${isMainnet}, networkSuffix: ${networkSuffix}`);
-  
-  if (isMainnet) {
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mapping/${mapping}${keySuffix}`);
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mapping/${mapping}/key${keySuffix}`);
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mappings/${mapping}${keySuffix}`);
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mappings/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}/key${keySuffix}`);
+
+  if (!IS_MAINNET) {
+    const base = CURRENT_RPC_URL.replace(/\/$/, '');
+    urls.push(`${base}/testnet/program/${programId}/mapping/${mapping}${keySuffix}`);
+    urls.push(`${base}/testnet/program/${programId}/mapping/${mapping}/key${keySuffix}`);
+    urls.push(`${base}/testnet/program/${programId}/mappings/${mapping}${keySuffix}`);
+    urls.push(`${base}/testnet/program/${programId}/mappings/${mapping}/key${keySuffix}`);
   }
   
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mapping/${mapping}${keySuffix}`);
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mapping/${mapping}/key${keySuffix}`);
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mappings/${mapping}${keySuffix}`);
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mappings/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}/key${keySuffix}`);
   
   return urls;
 };
@@ -96,8 +95,7 @@ export default async function handler(
         
         const orderedToken1 = token1Id < token2Id ? token1Id : token2Id;
         const orderedToken2 = token1Id < token2Id ? token2Id : token1Id;
-        const networkStr = CURRENT_NETWORK.toString().toLowerCase();
-        const network = networkStr.includes('mainnet') ? 'mainnet' : 'testnet';
+        const network = IS_MAINNET ? 'mainnet' : 'testnet';
         const leoStruct = `{token1: ${orderedToken1}, token2: ${orderedToken2}}`;
         const calculatedPoolId = Hasher.hash('bhp256', leoStruct, 'field', network);
         

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { CURRENT_NETWORK, CURRENT_RPC_URL, PROGRAM_ID } from '@/types';
+import { CURRENT_RPC_URL, PROGRAM_ID, IS_MAINNET, NETWORK_SUFFIX } from '@/types';
 
 interface PoolResponse {
   ok: boolean;
@@ -24,32 +24,25 @@ const candidateUrls = (programId: string, mapping: string, key?: string) => {
   const urls: string[] = [];
   const keySuffix = key ? `/${key}` : '';
   
-  // Determine network suffix based on CURRENT_NETWORK
-  // CURRENT_NETWORK is a WalletAdapterNetwork enum, check by converting to string (case-insensitive)
-  const networkStr = CURRENT_NETWORK.toString().toLowerCase();
-  const isMainnet = networkStr.includes('mainnet');
-  const networkSuffix = isMainnet ? 'mainnet' : 'testnetbeta';
-  
-  // Provable patterns (using explorer.provable.com for mainnet)
-  if (isMainnet) {
-    // Provable mainnet API patterns
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mapping/${mapping}${keySuffix}`);
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mapping/${mapping}/key${keySuffix}`);
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mappings/${mapping}${keySuffix}`);
-    urls.push(`https://api.explorer.provable.com/v1/mainnet/program/${programId}/mappings/${mapping}/key${keySuffix}`);
-  } else {
-    // Provable testnet patterns
-    urls.push(`${CURRENT_RPC_URL.replace(/\/$/, '')}/testnet/program/${programId}/mapping/${mapping}${keySuffix}`);
-    urls.push(`${CURRENT_RPC_URL.replace(/\/$/, '')}/testnet/program/${programId}/mapping/${mapping}/key${keySuffix}`);
-    urls.push(`${CURRENT_RPC_URL.replace(/\/$/, '')}/testnet/program/${programId}/mappings/${mapping}${keySuffix}`);
-    urls.push(`${CURRENT_RPC_URL.replace(/\/$/, '')}/testnet/program/${programId}/mappings/${mapping}/key${keySuffix}`);
+  // Provable explorer patterns
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.provable.com/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}/key${keySuffix}`);
+
+  if (!IS_MAINNET) {
+    const base = CURRENT_RPC_URL.replace(/\/$/, '');
+    urls.push(`${base}/testnet/program/${programId}/mapping/${mapping}${keySuffix}`);
+    urls.push(`${base}/testnet/program/${programId}/mapping/${mapping}/key${keySuffix}`);
+    urls.push(`${base}/testnet/program/${programId}/mappings/${mapping}${keySuffix}`);
+    urls.push(`${base}/testnet/program/${programId}/mappings/${mapping}/key${keySuffix}`);
   }
   
   // Aleo explorer patterns
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mapping/${mapping}${keySuffix}`);
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mapping/${mapping}/key${keySuffix}`);
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mappings/${mapping}${keySuffix}`);
-  urls.push(`https://api.explorer.aleo.org/v1/${networkSuffix}/program/${programId}/mappings/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mapping/${mapping}/key${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}${keySuffix}`);
+  urls.push(`https://api.explorer.aleo.org/v1/${NETWORK_SUFFIX}/program/${programId}/mappings/${mapping}/key${keySuffix}`);
   
   return urls;
 };
