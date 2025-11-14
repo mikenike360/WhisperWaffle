@@ -5,13 +5,13 @@ import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import React, { useCallback, useState, useEffect } from 'react';
 // Removed random images import for cleaner look
 // import { useRandomImages } from '@/utils/useRandomImages';
-import { SwapTab, PoolTab, BalancesTab, SettingsTab } from '@/components/dashboard';
+import { SwapTab, PoolTab, BalancesTab } from '@/components/dashboard';
 import { useUserBalances } from '@/hooks/use-user-balances';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 const SwapPage: NextPageWithLayout = () => {
   const { wallet, publicKey } = useWallet();
-  const [activeTab, setActiveTab] = useState<'swap' | 'pool' | 'balances' | 'settings'>('swap');
+  const [activeTab, setActiveTab] = useState<'swap' | 'pool' | 'balances'>('swap');
   const { balances, loading: balancesLoading, refreshBalances } = useUserBalances();
   
   
@@ -82,16 +82,7 @@ const SwapPage: NextPageWithLayout = () => {
                     >
                       <span className="text-2xl">💰</span> Balances
                     </button>
-                    <button
-                      onClick={() => setActiveTab('settings')}
-                      className={`px-6 py-3 text-base font-medium border-b-2 transition-all ${
-                        activeTab === 'settings'
-                          ? 'border-primary text-primary font-bold'
-                          : 'border-transparent text-base-content/60 hover:text-primary hover:border-primary/50'
-                      }`}
-                    >
-                      <span className="text-2xl">⚙️</span> Settings
-                    </button>
+                    {/* Settings tab temporarily disabled */}
                   </div>
 
                   {/* Tab Content */}
@@ -111,11 +102,7 @@ const SwapPage: NextPageWithLayout = () => {
                         <BalancesTab />
                               </div>
                             )}
-                    {activeTab === 'settings' && (
-                      <div className="p-6 border rounded-xl bg-white/90 shadow-sm">
-                        <SettingsTab />
-                      </div>
-                    )}
+                    {/* Settings content temporarily removed */}
                   </div>
                 </div>
                 <div className="hidden md:flex md:col-span-2 relative items-center justify-center" style={{ backgroundColor: 'transparent' }}>

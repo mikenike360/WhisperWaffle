@@ -3,17 +3,18 @@ import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { usePoolData } from '@/hooks/use-pool-data';
 import { useUserBalances } from '@/hooks/use-user-balances';
 import { useTokenDiscovery, TokenInfo } from '@/hooks/use-token-discovery';
-import { swapAleoForToken, swapTokenForAleo, swapTokens, getSwapQuote, checkLiquidity } from '@/utils/swapExecutor';
+import { swapAleoForToken, swapTokenForAleo, swapTokens, getSwapQuote, checkLiquidity, SwapExecutionResult } from '@/utils/swapExecutor';
 import { getAmountOut } from '@/utils/ammCalculations';
 import { getPoolReserves } from '@/utils/poolDataFetcher';
 import { TokenSelector } from '@/components/ui/TokenSelector';
-import { NATIVE_ALEO_ID, COMMON_TOKEN_IDS, TOKEN_IDS } from '@/types';
+import { NATIVE_ALEO_ID, COMMON_TOKEN_IDS, TOKEN_IDS, IS_MAINNET } from '@/types';
 import { fetchTokenBalance } from '@/utils/balanceFetcher';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { PriceImpactBadge } from '@/components/ui/PriceImpactBadge';
 import { SuccessAnimation } from '@/components/ui/SuccessAnimation';
-import { useSettings } from '@/context/SettingsContext';
+import { useSettings, MIN_SLIPPAGE_BPS, SLIPPAGE_LIMIT_BPS } from '@/context/SettingsContext';
+import { useTransactionStatus } from '@/hooks/useTransactionStatus';
 
 // Helper functions
 const toAtomic = (amt: string, decimals: number): bigint => {
@@ -45,12 +46,36 @@ const fmtNumber = (n: number | string): string => {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const formatTxId = (id: string) => (id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id);
+const explorerTxUrl = (id: string) =>
+  `${IS_MAINNET ? 'https://explorer.aleo.org/transaction/' : 'https://explorer.aleo.org/testnet/transaction/'}${id}`;
+
+const MIN_SUGGESTED_SLIPPAGE_BPS = 50; // 0.5%
+const MAX_SUGGESTED_SLIPPAGE_BPS = 4500; // 45%
+const SLIPPAGE_BUFFER_BPS = 50; // +0.5%
+const MAX_AUTOMATIC_SLIPPAGE_BPS = 4500; // 45%
+
+const calculateShareBps = (part: bigint, whole: bigint): number | null => {
+  if (whole <= 0n) return null;
+  return Number((part * 10000n) / whole);
+};
+
+const bigintToUnits = (value: bigint, decimals: number): number => {
+  if (decimals <= 0) return Number(value);
+  const scale = 10n ** BigInt(decimals);
+  const whole = value / scale;
+  const remainder = value % scale;
+  const fractional = Number(remainder) / Number(scale);
+  return Number(whole) + fractional;
+};
+
 interface SwapTabProps {}
 
 const SwapTab: React.FC<SwapTabProps> = () => {
   const { publicKey, wallet } = useWallet();
-  const { slippageBps } = useSettings();
-  const slippagePercent = useMemo(() => slippageBps / 100, [slippageBps]);
+  const { slippageBps: contextSlippageBps, setSlippageBps: persistSlippageBps } = useSettings();
+  const [slippageBps, setSlippageBpsState] = useState<number>(contextSlippageBps);
+  const slippagePercent = slippageBps / 100;
   const slippageFactor = useMemo(() => BigInt(10000 - slippageBps), [slippageBps]);
   const [fromToken, setFromToken] = useState<TokenInfo | null>(null);
   const [toToken, setToToken] = useState<TokenInfo | null>(null);
@@ -58,8 +83,46 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   const [toAmount, setToAmount] = useState('');
   const [poolReserves, setPoolReserves] = useState<{ reserve1: bigint; reserve2: bigint; swapFee: number; token1Id: string; token2Id: string } | null>(null);
   const [liquidityError, setLiquidityError] = useState<string | null>(null);
+  const [autoAppliedSlippageBps, setAutoAppliedSlippageBps] = useState<number | null>(null);
+  const [autoSlippageReason, setAutoSlippageReason] = useState<'depth' | 'dynamic' | null>(null);
   const tokensInitialized = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clampSlippageBps = useCallback(
+    (value: number) => Math.min(SLIPPAGE_LIMIT_BPS, Math.max(MIN_SLIPPAGE_BPS, Math.round(value))),
+    []
+  );
+
+  const directionMinSlippageBps = useMemo(() => {
+    if (!fromToken || !toToken) return null;
+    if (fromToken.id === NATIVE_ALEO_ID && toToken.id === TOKEN_IDS.WAFFLE) {
+      return 1000;
+    }
+    return null;
+  }, [fromToken?.id, toToken?.id]);
+
+  const applySlippageBps = useCallback(
+    (value: number) => {
+      const enforcedMinimum = directionMinSlippageBps ?? MIN_SLIPPAGE_BPS;
+      const normalized = clampSlippageBps(Math.max(value, enforcedMinimum));
+      setSlippageBpsState(normalized);
+      persistSlippageBps(normalized);
+      return normalized;
+    },
+    [clampSlippageBps, persistSlippageBps, directionMinSlippageBps]
+  );
+
+  useEffect(() => {
+    setSlippageBpsState(contextSlippageBps);
+  }, [contextSlippageBps]);
+
+  useEffect(() => {
+    // reset slippage to default when tokens change to avoid stale suggestions
+    setSlippageBpsState(contextSlippageBps);
+    setShowSlippageSuggestion(false);
+    setAutoAppliedSlippageBps(null);
+    setAutoSlippageReason(null);
+  }, [contextSlippageBps, fromToken?.id, toToken?.id]);
 
   // Hooks
   const { poolData, loading: poolLoading, error: poolError, refreshPoolData } = usePoolData();
@@ -300,12 +363,14 @@ const SwapTab: React.FC<SwapTabProps> = () => {
 
   // Effects
   useEffect(() => {
-    if (quote && !('error' in quote)) {
-      setToAmount(quote.amountOut);
+    if (quote && !('error' in quote) && toToken) {
+      const minAtomic = (quote.amountOutAtomic * slippageFactor) / 10000n;
+      const minDisplayRaw = fromAtomic(minAtomic, toToken.decimals);
+      setToAmount(fmtNumber(minDisplayRaw));
     } else {
       setToAmount('');
     }
-  }, [quote]);
+  }, [quote, toToken, slippageFactor]);
 
   // Handlers
   const switchTokens = useCallback(() => {
@@ -325,16 +390,23 @@ const SwapTab: React.FC<SwapTabProps> = () => {
     setFromAmount(String(max));
   }, [fromToken, customTokenBalances]);
 
-  const [isSwapping, setIsSwapping] = useState(false);
-  const [swapStatus, setSwapStatus] = useState<string>('');
   const [showSuccess, setShowSuccess] = useState(false);
+  const {
+    isPending,
+    statusMessage,
+    txId: finalizedTxId,
+    error: transactionError,
+    start: startTransaction,
+    update: updateTransaction,
+    succeed: succeedTransaction,
+    fail: failTransaction,
+  } = useTransactionStatus();
 
   const handleSwap = useCallback(async () => {
     if (!publicKey || !wallet || !fromToken || !toToken) return;
     
     try {
-      setIsSwapping(true);
-      setSwapStatus('Preparing swap...');
+      startTransaction('Preparing swap...');
       
       const amountInAtomic = toAtomic(fromAmount, fromToken.decimals);
       if (amountInAtomic <= 0n) {
@@ -400,73 +472,76 @@ const SwapTab: React.FC<SwapTabProps> = () => {
         priceImpact: quote && !('error' in quote) ? quote.priceImpact : null
       });
       
-      let success = false;
+      const statusUpdater = (message: string) => {
+        updateTransaction(message);
+      };
+      let txResult: SwapExecutionResult | null = null;
       
       if (fromToken.id === NATIVE_ALEO_ID && toToken.id !== NATIVE_ALEO_ID) {
         // ALEO → Token
-        setSwapStatus('Executing ALEO to Token swap...');
-        success = await swapAleoForToken(
+        txResult = await swapAleoForToken(
           wallet,
           publicKey.toString(),
           toToken.id,
           amountInAtomic,
           executionOutputAtomic,
-          executionOutputAtomic
+          executionOutputAtomic,
+          statusUpdater
         );
         
       } else if (fromToken.id !== NATIVE_ALEO_ID && toToken.id === NATIVE_ALEO_ID) {
         // Token → ALEO
-        setSwapStatus('Executing Token to ALEO swap...');
-        success = await swapTokenForAleo(
+        txResult = await swapTokenForAleo(
           wallet,
           publicKey.toString(),
           fromToken.id,
           amountInAtomic,
           executionOutputAtomic,
-          executionOutputAtomic
+          executionOutputAtomic,
+          statusUpdater
         );
         
       } else if (fromToken.id !== NATIVE_ALEO_ID && toToken.id !== NATIVE_ALEO_ID) {
         // Token → Token
-        setSwapStatus('Executing Token to Token swap...');
-        success = await swapTokens(
+        txResult = await swapTokens(
           wallet,
           publicKey.toString(),
           fromToken.id,
           toToken.id,
           amountInAtomic,
           executionOutputAtomic,
-          executionOutputAtomic
+          executionOutputAtomic,
+          statusUpdater
         );
         
       } else {
         throw new Error('Cannot swap ALEO to ALEO');
       }
       
-      if (success) {
-        setSwapStatus('Swap completed successfully!');
-        // Clear amounts after successful swap
-        setFromAmount('');
-        setToAmount('');
-      } else {
-        throw new Error('Swap failed');
+      if (!txResult) {
+        throw new Error('Swap failed to finalize');
       }
+      
+      updateTransaction('Transaction finalized! Updating balances...');
       
       // Refresh balances after successful swap
       await refreshBalances();
       await refreshPoolData?.();
-      
-      // Show success animation
+
+      // Clear amounts after successful swap
+      setFromAmount('');
+      setToAmount('');
+
+      succeedTransaction(txResult.txId, `Swap finalized: ${formatTxId(txResult.txId)}`);
       setShowSuccess(true);
-      setSwapStatus('Swap completed successfully!');
       
     } catch (error) {
       console.error('Swap error:', error);
-      setSwapStatus(`Swap failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSwapping(false);
+      const message = `Swap failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      failTransaction(message);
+      setShowSuccess(false);
     }
-  }, [publicKey, wallet, fromToken, toToken, fromAmount, refreshBalances, refreshPoolData, poolReserves, slippageFactor, slippageBps, quote]);
+  }, [publicKey, wallet, fromToken, toToken, fromAmount, refreshBalances, refreshPoolData, poolReserves, slippageFactor, slippageBps, quote, startTransaction, updateTransaction, succeedTransaction, failTransaction]);
 
   // Helper function to get balance for a token
   const getBalance = (symbol: string, tokenId?: string): number => {
@@ -499,16 +574,155 @@ const SwapTab: React.FC<SwapTabProps> = () => {
     if (!quote || 'error' in quote) return false;
     return quote.priceImpact > slippagePercent;
   }, [quote, slippagePercent]);
-  const canSwap = publicKey && fromAmount && Number(fromAmount) > 0 && fromToken && toToken && fromToken.id !== toToken.id && hasBalance && hasValidQuote && !liquidityError && poolReserves !== null && !priceImpactTooHigh;
+
+  const suggestedSlippageBps = useMemo(() => {
+    if (!quote || 'error' in quote) return null;
+    if (!poolReserves || !fromToken || !toToken) return null;
+    if (!fromAmount || Number(fromAmount) <= 0) return null;
+
+    const fromDecimals = fromToken.decimals ?? 6;
+    const toDecimals = toToken.decimals ?? 6;
+    const amountInAtomic = toAtomic(fromAmount, fromDecimals);
+    if (amountInAtomic <= 0n) return null;
+
+    let isToken1ToToken2 = true;
+    if (poolReserves.token1Id === fromToken.id && poolReserves.token2Id === toToken.id) {
+      isToken1ToToken2 = true;
+    } else if (poolReserves.token1Id === toToken.id && poolReserves.token2Id === fromToken.id) {
+      isToken1ToToken2 = false;
+    }
+
+    const reserveIn = isToken1ToToken2 ? poolReserves.reserve1 : poolReserves.reserve2;
+    const reserveOut = isToken1ToToken2 ? poolReserves.reserve2 : poolReserves.reserve1;
+    if (reserveIn <= 0n || reserveOut <= 0n) return null;
+
+    const priceImpactPercent = quote.priceImpact ?? 0;
+    const impactBps = Math.max(0, Math.ceil(priceImpactPercent * 100));
+    let dynamicBps = Math.max(MIN_SUGGESTED_SLIPPAGE_BPS, impactBps + SLIPPAGE_BUFFER_BPS);
+
+    const tradeShareBps = calculateShareBps(amountInAtomic, reserveIn) ?? 0;
+    const outShareBps = calculateShareBps(quote.amountOutAtomic, reserveOut) ?? 0;
+    const severityBps = Math.max(tradeShareBps, outShareBps);
+
+    const severityMultiplier = 1 + Math.min(3, severityBps / 400);
+    dynamicBps = Math.ceil(dynamicBps * severityMultiplier);
+
+    if (severityBps > 800) {
+      dynamicBps += 400;
+    } else if (severityBps > 400) {
+      dynamicBps += 200;
+    }
+
+    const fromAmountNumber = Number(fromAmount);
+    if (!Number.isNaN(fromAmountNumber)) {
+      if (fromAmountNumber >= 1) {
+        dynamicBps += Math.ceil(fromAmountNumber * 40); // +0.4% per ALEO/token
+      }
+      if (fromAmountNumber >= 5) {
+        dynamicBps += 250;
+      }
+    }
+
+    const reserveOutUnits = bigintToUnits(reserveOut, toDecimals);
+    if (reserveOutUnits < 250) {
+      dynamicBps += 350;
+    } else if (reserveOutUnits < 500) {
+      dynamicBps += 250;
+    } else if (reserveOutUnits < 1000) {
+      dynamicBps += 150;
+    }
+
+    if (priceImpactPercent > 5) {
+      dynamicBps += 250;
+    }
+    if (priceImpactPercent > 10) {
+      dynamicBps += 400;
+    }
+
+    const enforcedMin = directionMinSlippageBps ?? MIN_SUGGESTED_SLIPPAGE_BPS;
+    dynamicBps = Math.max(dynamicBps, enforcedMin);
+    dynamicBps = Math.min(dynamicBps, MAX_AUTOMATIC_SLIPPAGE_BPS);
+    dynamicBps = clampSlippageBps(dynamicBps);
+
+    return dynamicBps;
+  }, [
+    quote,
+    poolReserves,
+    fromAmount,
+    fromToken,
+    toToken,
+    directionMinSlippageBps,
+    clampSlippageBps,
+  ]);
+
+  const [showSlippageSuggestion, setShowSlippageSuggestion] = useState(false);
+
+  useEffect(() => {
+    if (!suggestedSlippageBps || !fromAmount || Number(fromAmount) <= 0) {
+      setShowSlippageSuggestion(false);
+      return;
+    }
+    if (suggestedSlippageBps > slippageBps) {
+      setShowSlippageSuggestion(true);
+    } else {
+      setShowSlippageSuggestion(false);
+    }
+  }, [suggestedSlippageBps, slippageBps, fromAmount, fromToken?.id, toToken?.id]);
+
+  const swapExceedsSlippageCap = useMemo(() => {
+    if (!suggestedSlippageBps) return false;
+    return suggestedSlippageBps >= MAX_SUGGESTED_SLIPPAGE_BPS && suggestedSlippageBps > slippageBps;
+  }, [suggestedSlippageBps, slippageBps]);
+
+  useEffect(() => {
+    if (!directionMinSlippageBps) return;
+    if (slippageBps >= directionMinSlippageBps) return;
+    const normalized = applySlippageBps(directionMinSlippageBps);
+    setAutoAppliedSlippageBps(normalized);
+    setAutoSlippageReason('depth');
+    setShowSlippageSuggestion(false);
+  }, [directionMinSlippageBps, slippageBps, applySlippageBps]);
+
+  useEffect(() => {
+    if (!suggestedSlippageBps || swapExceedsSlippageCap) return;
+    if (!fromAmount || Number(fromAmount) <= 0) return;
+    const target = Math.max(suggestedSlippageBps, directionMinSlippageBps ?? 0);
+    if (target > slippageBps) {
+      const normalized = applySlippageBps(target);
+      setAutoAppliedSlippageBps(normalized);
+      setAutoSlippageReason('dynamic');
+      setShowSlippageSuggestion(false);
+    }
+  }, [suggestedSlippageBps, swapExceedsSlippageCap, fromAmount, slippageBps, applySlippageBps, directionMinSlippageBps]);
+
+  useEffect(() => {
+    if (autoAppliedSlippageBps && slippageBps !== autoAppliedSlippageBps) {
+      setAutoAppliedSlippageBps(null);
+      setAutoSlippageReason(null);
+    }
+  }, [autoAppliedSlippageBps, slippageBps]);
+
+  const canSwap =
+    publicKey &&
+    fromAmount &&
+    Number(fromAmount) > 0 &&
+    fromToken &&
+    toToken &&
+    fromToken.id !== toToken.id &&
+    hasBalance &&
+    hasValidQuote &&
+    !liquidityError &&
+    poolReserves !== null &&
+    !priceImpactTooHigh &&
+    !swapExceedsSlippageCap;
 
   const minReceived = useMemo(() => {
-    if (!hasValidQuote) return '-';
-    if (!toToken) return '-';
+    if (!hasValidQuote || !toToken) return '-';
     const outAtomic = quote.amountOutAtomic;
     const minAtomic = (outAtomic * slippageFactor) / 10000n;
     const minDisplayRaw = fromAtomic(minAtomic, toToken.decimals);
-    return fmtNumber(minDisplayRaw);
-  }, [quote, hasValidQuote, fromToken?.id, toToken, slippageFactor]);
+    return `${fmtNumber(minDisplayRaw)} ${toToken.symbol}`;
+  }, [quote, hasValidQuote, toToken, slippageFactor]);
 
   const priceImpactStr = useMemo(() => {
     if (!hasValidQuote) return '0.00%';
@@ -518,16 +732,33 @@ const SwapTab: React.FC<SwapTabProps> = () => {
   const gasEstimate = useMemo(() => '~0.1 ALEO', []);
   
   const priceDisplay = useMemo(() => {
-    if (!hasValidQuote || !poolReserves || !fromToken || !toToken) return '-';
-    const rate = Number(toAmount) / Number(fromAmount);
-    return `1 ${fromToken.symbol} = ${fmtNumber(rate)} ${toToken.symbol}`;
-  }, [hasValidQuote, fromToken, toToken, fromAmount, toAmount]);
+    if (!hasValidQuote || !fromToken || !toToken || !fromAmount) return '-';
+    const amountAtomic = toAtomic(fromAmount, fromToken.decimals);
+    if (amountAtomic === 0n) return '-';
+    const outAtomic = quote.amountOutAtomic;
+    const minAtomic = (outAtomic * slippageFactor) / 10000n;
+    const unitAtomic = 10n ** BigInt(fromToken.decimals);
+    const minPerUnitAtomic = (minAtomic * unitAtomic) / amountAtomic;
+    const minPerUnitRaw = fromAtomic(minPerUnitAtomic, toToken.decimals);
+    return `1 ${fromToken.symbol} ≈ ${fmtNumber(minPerUnitRaw)} ${toToken.symbol} (minimum after ${slippagePercent.toFixed(2)}% slippage)`;
+  }, [hasValidQuote, quote, fromToken, toToken, fromAmount, slippageFactor, slippagePercent]);
 
   const poolExists = poolReserves !== null;
   const poolEmpty = poolReserves && poolReserves.reserve1 === BigInt(0) && poolReserves.reserve2 === BigInt(0);
 
   return (
     <div className="space-y-4">
+      {isPending && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-white/70 backdrop-blur-sm pointer-events-none">
+          <div className="flex flex-col items-center gap-4 bg-white/90 border border-primary/40 shadow-xl rounded-3xl px-10 py-8">
+            <div className="text-5xl animate-waffle-bounce-gentle">🧇</div>
+            <LoadingSpinner size="small" />
+            <p className="text-sm font-semibold text-gray-700 text-center">
+              {statusMessage || 'Waiting for transaction to finalize...'}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="text-center mb-4">
         <h2 className="text-xl font-semibold text-gray-800 mb-1">Swap Tokens</h2>
         <p className="text-xs text-gray-600">AMM-powered exchange</p>
@@ -580,9 +811,47 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       )}
 
       {priceImpactTooHigh && quote && !('error' in quote) && (
+        <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200 text-center text-yellow-800 text-sm">
+          ⚠️ Price impact ({quote.priceImpact.toFixed(2)}%) is above your current slippage tolerance ({slippagePercent.toFixed(2)}%).
+          {showSlippageSuggestion && suggestedSlippageBps && ` Suggested tolerance: ${(suggestedSlippageBps / 100).toFixed(2)}%.`}
+        </div>
+      )}
+      {swapExceedsSlippageCap && (
         <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center text-red-800 text-sm">
-          ⚠️ Price impact ({quote.priceImpact.toFixed(2)}%) exceeds your slippage tolerance ({slippagePercent.toFixed(2)}%).
-          Reduce trade size or adjust slippage in Settings.
+          This trade would require more than {(MAX_SUGGESTED_SLIPPAGE_BPS / 100).toFixed(2)}% slippage. Reduce the amount or add liquidity.
+        </div>
+      )}
+      {autoAppliedSlippageBps && (
+        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-center text-blue-800 text-sm">
+          {autoSlippageReason === 'depth'
+            ? `Slippage tolerance automatically raised to ${(autoAppliedSlippageBps / 100).toFixed(2)}% for ALEO → WAFFLE trades with shallow ALEO reserves. Review the quote before confirming.`
+            : `Adaptive slippage set to ${(autoAppliedSlippageBps / 100).toFixed(2)}% based on pool depth, price impact, and trade size. Review the quote before confirming.`}
+        </div>
+      )}
+      {showSlippageSuggestion && suggestedSlippageBps && !swapExceedsSlippageCap && (
+        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-center text-blue-800 text-sm flex flex-col gap-2">
+          <span>
+            Suggested slippage tolerance: {(suggestedSlippageBps / 100).toFixed(2)}% (current {slippagePercent.toFixed(2)}%).
+          </span>
+          <div className="flex justify-center gap-2">
+            <button
+              className="px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+              onClick={() => {
+                applySlippageBps(suggestedSlippageBps);
+                setShowSlippageSuggestion(false);
+                setAutoAppliedSlippageBps(null);
+                setAutoSlippageReason(null);
+              }}
+            >
+              Apply suggestion
+            </button>
+            <button
+              className="px-3 py-1 rounded-full bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 transition-colors"
+              onClick={() => setShowSlippageSuggestion(false)}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -716,7 +985,7 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       {hasValidQuote && (
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="p-3 bg-gray-50 rounded-lg">
-            <span className="text-gray-600">Exchange Rate:</span>
+            <span className="text-gray-600">Minimum rate:</span>
             <span className="ml-2 font-medium">{priceDisplay}</span>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg">
@@ -732,12 +1001,16 @@ const SwapTab: React.FC<SwapTabProps> = () => {
           <h3 className="font-medium text-blue-800 mb-2">Transaction Details</h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-blue-700">Min received:</span>
+              <span className="text-blue-700">Receive at least:</span>
               <span className="font-medium">{minReceived}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-blue-700">Price impact:</span>
               <PriceImpactBadge impact={hasValidQuote ? quote.priceImpact : 0} />
+            </div>
+            <div className="flex justify-between">
+              <span className="text-blue-700">Slippage tolerance:</span>
+              <span className="font-medium">{slippagePercent.toFixed(2)}%</span>
             </div>
             <div className="flex justify-between">
               <span className="text-blue-700">Fee:</span>
@@ -756,28 +1029,48 @@ const SwapTab: React.FC<SwapTabProps> = () => {
       )}
 
       {/* Swap Status */}
-      {swapStatus && (
-        <div className={`p-4 rounded-xl border ${
-          swapStatus.includes('failed') || swapStatus.includes('error') 
-            ? 'bg-red-50 border-red-200 text-red-800' 
-            : swapStatus.includes('completed') 
-            ? 'bg-green-50 border-green-200 text-green-800'
-            : 'bg-blue-50 border-blue-200 text-blue-800'
-        }`}>
-          <div className="text-center font-medium">{swapStatus}</div>
+      {statusMessage && (
+        <div
+          className={`p-4 rounded-xl border ${
+            transactionError
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : finalizedTxId && !isPending
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}
+        >
+          <div className="text-center font-medium">{statusMessage}</div>
+          {finalizedTxId && !transactionError && (
+            <div className="text-center text-xs mt-1 text-current">
+              Tx{' '}
+              <a
+                href={explorerTxUrl(finalizedTxId)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                {formatTxId(finalizedTxId)}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+      {transactionError && (
+        <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200 text-center text-yellow-800 text-sm">
+          Tip: if swaps keep failing, try increasing your slippage tolerance in Settings or add more liquidity to this pool.
         </div>
       )}
 
       {/* Swap Button */}
       <button
         onClick={handleSwap}
-        disabled={!canSwap || loadingQuote || isSwapping}
+        disabled={!canSwap || loadingQuote || isPending}
                       className="w-full py-4 px-6 rounded-2xl bg-primary text-primary-content font-bold text-lg shadow-lg
                    hover:shadow-xl transition-all
                    disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
                    hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
       >
-        {isSwapping ? (
+        {isPending ? (
           <>
             <LoadingSpinner size="small" />
             <span>Swapping...</span>

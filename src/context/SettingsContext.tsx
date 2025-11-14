@@ -1,48 +1,57 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 
 interface SettingsContextValue {
   slippageBps: number;
-  setSlippageBps: (bps: number) => void;
+  setSlippageBps: (value: number) => void;
 }
 
 const DEFAULT_SLIPPAGE_BPS = 50; // 0.5%
-const SLIPPAGE_STORAGE_KEY = 'whisperwaffle:slippageBps';
+export const SLIPPAGE_LIMIT_BPS = 10000; // 100%
+export const MIN_SLIPPAGE_BPS = 1; // 0.01%
 
-const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
+const SettingsContext = createContext<SettingsContextValue>({
+  slippageBps: DEFAULT_SLIPPAGE_BPS,
+  setSlippageBps: () => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('setSlippageBps called outside of SettingsProvider');
+    }
+  },
+});
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [slippageBps, setSlippageBpsState] = useState<number>(DEFAULT_SLIPPAGE_BPS);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedValue = window.localStorage.getItem(SLIPPAGE_STORAGE_KEY);
-    if (storedValue) {
-      const parsed = parseInt(storedValue, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        setSlippageBpsState(parsed);
-      }
+    const stored = window.localStorage.getItem('ww_auto_slippage_bps');
+    if (!stored) return;
+    const parsed = Number(stored);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      const normalized = Math.min(SLIPPAGE_LIMIT_BPS, Math.max(MIN_SLIPPAGE_BPS, Math.round(parsed)));
+      setSlippageBpsState(normalized);
     }
   }, []);
 
-  const setSlippageBps = (bps: number) => {
-    setSlippageBpsState(bps);
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(SLIPPAGE_STORAGE_KEY, String(bps));
+      window.localStorage.setItem('ww_auto_slippage_bps', String(slippageBps));
     }
-  };
+  }, [slippageBps]);
 
-  const value = useMemo(() => ({ slippageBps, setSlippageBps }), [slippageBps]);
+  const setSlippageBps = useCallback((value: number) => {
+    const normalized = Math.min(SLIPPAGE_LIMIT_BPS, Math.max(MIN_SLIPPAGE_BPS, Math.round(value)));
+    setSlippageBpsState(normalized);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      slippageBps,
+      setSlippageBps,
+    }),
+    [slippageBps, setSlippageBps]
+  );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };
 
-export const useSettings = (): SettingsContextValue => {
-  const ctx = useContext(SettingsContext);
-  if (!ctx) {
-    throw new Error('useSettings must be used within a SettingsProvider');
-  }
-  return ctx;
-};
-
-export const SLIPPAGE_LIMIT_BPS = 10000; // 100%
-export const MIN_SLIPPAGE_BPS = 1; // 0.01%
+export const useSettings = () => useContext(SettingsContext);

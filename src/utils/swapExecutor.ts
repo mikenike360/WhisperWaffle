@@ -2,6 +2,9 @@
 import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
 import { CURRENT_NETWORK, PROGRAM_ID, NATIVE_ALEO_ID, TOKEN_IDS } from '../types';
 import { getAmountOut, calculatePriceImpact } from './ammCalculations';
+import { executeWithFinalization, FinalizedTransactionResult } from './transaction';
+
+export type SwapStatusCallback = (status: string) => void;
 
 // New AMM DEX function names
 const SWAP_ALEO_FOR_TOKEN = 'swap_aleo_for_token';
@@ -45,8 +48,9 @@ export async function swapAleoForToken(
   tokenId: string,
   aleoAmount: bigint,
   minTokenOut: bigint,
-  expectedTokenOut: bigint
-): Promise<boolean> {
+  expectedTokenOut: bigint,
+  onStatus?: SwapStatusCallback
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -55,7 +59,7 @@ export async function swapAleoForToken(
       throw new Error('Expected token output is below minimum.');
     }
     // Calculate fee (in micro credits) - updated for new AMM functions
-    const fee = 100000; // 0.1 ALEO for transaction fee
+    const fee = 117720; // 0.11772 ALEO (measured)
     
     console.log('Swapping ALEO for token with parameters:', {
       tokenId,
@@ -65,23 +69,6 @@ export async function swapAleoForToken(
       fee,
       publicKey
     });
-
-    // Helper to submit tx and wait for finalization
-    const sendAndWait = async (tx: any) => {
-      const id = await wallet.adapter.requestTransaction(tx);
-      if (!id) throw new Error('No transaction ID returned from wallet');
-      let status = await wallet.adapter.transactionStatus(id);
-      let attempts = 0;
-      while (status === 'Pending' && attempts < 60) {
-        await new Promise((r) => setTimeout(r, 1000));
-        status = await wallet.adapter.transactionStatus(id);
-        attempts++;
-      }
-      if (status !== 'Completed' && status !== 'Finalized') {
-        throw new Error(`Tx not completed: ${status}`);
-      }
-      return id;
-    };
 
     // Call the AMM DEX program
     // Parameters: [token_id: field, aleo_in: u128, min_token_out: u128]
@@ -103,10 +90,10 @@ export async function swapAleoForToken(
       fee,
       false
     );
-    await sendAndWait(txDex);
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Swap ALEO for token completed successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     console.error('Error swapping ALEO for token:', error);
@@ -129,8 +116,9 @@ export async function swapTokenForAleo(
   tokenId: string,
   tokenAmount: bigint,
   minAleoOut: bigint,
-  expectedAleoOut: bigint
-): Promise<boolean> {
+  expectedAleoOut: bigint,
+  onStatus?: SwapStatusCallback
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -139,7 +127,7 @@ export async function swapTokenForAleo(
       throw new Error('Expected ALEO output is below minimum.');
     }
     // Calculate fee (in micro credits)
-    const fee = 100000; // 0.1 ALEO for transaction fee
+    const fee = 116540; // 0.11654 ALEO (measured)
     
     console.log('Swapping token for ALEO with parameters:', {
       tokenId,
@@ -149,23 +137,6 @@ export async function swapTokenForAleo(
       fee,
       publicKey
     });
-
-    // Helper to submit tx and wait for finalization
-    const sendAndWait = async (tx: any) => {
-      const id = await wallet.adapter.requestTransaction(tx);
-      if (!id) throw new Error('No transaction ID returned from wallet');
-      let status = await wallet.adapter.transactionStatus(id);
-      let attempts = 0;
-      while (status === 'Pending' && attempts < 60) {
-        await new Promise((r) => setTimeout(r, 1000));
-        status = await wallet.adapter.transactionStatus(id);
-        attempts++;
-      }
-      if (status !== 'Completed' && status !== 'Finalized') {
-        throw new Error(`Tx not completed: ${status}`);
-      }
-      return id;
-    };
 
     // Call the AMM DEX program
     // Parameters: [token_id: field, token_in: u128, min_aleo_out: u128]
@@ -187,10 +158,10 @@ export async function swapTokenForAleo(
       fee,
       false
     );
-    await sendAndWait(txDex);
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Swap token for ALEO completed successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     console.error('Error swapping token for ALEO:', error);
@@ -215,8 +186,9 @@ export async function swapTokens(
   token2Id: string,
   token1Amount: bigint,
   minToken2Out: bigint,
-  expectedToken2Out: bigint
-): Promise<boolean> {
+  expectedToken2Out: bigint,
+  onStatus?: SwapStatusCallback
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -225,7 +197,7 @@ export async function swapTokens(
       throw new Error('Expected token output is below minimum.');
     }
     // Calculate fee (in micro credits)
-    const fee = 100000; // 0.1 ALEO for transaction fee
+    const fee = 147030; // 0.14703 ALEO (measured)
     
     console.log('Swapping tokens with parameters:', {
       token1Id,
@@ -236,23 +208,6 @@ export async function swapTokens(
       fee,
       publicKey
     });
-
-    // Helper to submit tx and wait for finalization
-    const sendAndWait = async (tx: any) => {
-      const id = await wallet.adapter.requestTransaction(tx);
-      if (!id) throw new Error('No transaction ID returned from wallet');
-      let status = await wallet.adapter.transactionStatus(id);
-      let attempts = 0;
-      while (status === 'Pending' && attempts < 60) {
-        await new Promise((r) => setTimeout(r, 1000));
-        status = await wallet.adapter.transactionStatus(id);
-        attempts++;
-      }
-      if (status !== 'Completed' && status !== 'Finalized') {
-        throw new Error(`Tx not completed: ${status}`);
-      }
-      return id;
-    };
 
     // Call the AMM DEX program
     // Parameters: [token1_id: field, token2_id: field, token1_in: u128, min_token2_out: u128]
@@ -275,10 +230,10 @@ export async function swapTokens(
       fee,
       false
     );
-    await sendAndWait(txDex);
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Swap tokens completed successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     console.error('Error swapping tokens:', error);

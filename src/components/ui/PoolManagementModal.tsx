@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { Modal } from './Modal';
 import { CuratedToken, CURATED_TOKENS } from '@/config/tokens';
@@ -12,9 +12,12 @@ import {
   calculateOptimalLiquidityAmounts,
 } from '@/utils/addLiquidity';
 import { getUserLiquidityPosition, LiquidityPosition } from '@/utils/poolDataFetcher';
-import { NATIVE_ALEO_ID } from '@/types';
+import { NATIVE_ALEO_ID, IS_MAINNET } from '@/types';
 import { useSettings } from '@/context/SettingsContext';
 import { sqrtApprox } from '@/utils/ammCalculations';
+import { useTransactionStatus } from '@/hooks/useTransactionStatus';
+import type { FinalizedTransactionResult } from '@/utils/transaction';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 interface PoolInfo {
   exists: boolean;
@@ -88,10 +91,21 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
   const [token1Amount, setToken1Amount] = useState('');
   const [token2Amount, setToken2Amount] = useState('');
   const [swapFee, setSwapFee] = useState(30); // 0.3%
-  const [isCreatingPool, setIsCreatingPool] = useState(false);
-  const [isAddingLiquidity, setIsAddingLiquidity] = useState(false);
-  const [isRemovingLiquidity, setIsRemovingLiquidity] = useState(false);
-  const [status, setStatus] = useState('');
+  const [activeAction, setActiveAction] = useState<'create' | 'add' | 'remove' | null>(null);
+  const {
+    isPending: txPending,
+    statusMessage,
+    txId: txResultId,
+    error: txError,
+    start: startTransaction,
+    update: updateTransaction,
+    succeed: succeedTransaction,
+    fail: failTransaction,
+  } = useTransactionStatus();
+
+  const formatTxId = (id: string) => (id.length > 14 ? `${id.slice(0, 6)}…${id.slice(-6)}` : id);
+  const explorerTxUrl = (id: string) =>
+    `${IS_MAINNET ? 'https://explorer.aleo.org/transaction/' : 'https://explorer.aleo.org/testnet/transaction/'}${id}`;
   
   // User position state
   type ExpandedUserPosition = LiquidityPosition & {
@@ -250,135 +264,69 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
   // Create pool
   const handleCreatePool = async () => {
     if (!publicKey || !wallet) return;
-    
+
     const currentToken1 = selectedToken1 || token1;
     const currentToken2 = selectedToken2 || token2;
-    
+
     if (!currentToken1 || !currentToken2) {
-      setStatus('Please select both tokens');
+      failTransaction('Please select both tokens');
       return;
     }
-    
+
     try {
-      setIsCreatingPool(true);
-      setStatus('Creating pool...');
-      
+      setActiveAction('create');
+      startTransaction('Creating pool...');
+
       const amount1 = Number(token1Amount);
       const amount2 = Number(token2Amount);
-      
-      if (amount1 <= 0 || amount2 <= 0 || isNaN(amount1) || isNaN(amount2)) {
-        throw new Error('Invalid amounts - please enter valid numbers');
+
+      if (!Number.isFinite(amount1) || !Number.isFinite(amount2) || amount1 <= 0 || amount2 <= 0) {
+        throw new Error('Invalid token amounts.');
       }
-      
+
       const amount1Atomic = Math.floor(amount1 * Math.pow(10, currentToken1.decimals));
       const amount2Atomic = Math.floor(amount2 * Math.pow(10, currentToken2.decimals));
 
-      if (isNaN(amount1Atomic) || isNaN(amount2Atomic) || amount1Atomic <= 0 || amount2Atomic <= 0) {
-        throw new Error('Invalid token amounts - please check your input');
+      if (amount1Atomic <= 0 || amount2Atomic <= 0) {
+        throw new Error('Token amounts must be greater than zero.');
       }
 
       const minLpTokensBigInt = computeMinLpTokens(amount1Atomic, amount2Atomic);
-      const geometricMean = sqrtApprox(
-        BigInt(Math.max(Math.floor(amount1Atomic), 0)) *
-          BigInt(Math.max(Math.floor(amount2Atomic), 0))
-      );
 
-      console.log('Pool creation amounts:', {
-        amount1,
-        amount2,
-        token1Decimals: currentToken1.decimals,
-        token2Decimals: currentToken2.decimals,
-        amount1Atomic,
-        amount2Atomic,
-        token1Symbol: currentToken1.symbol,
-        token2Symbol: currentToken2.symbol,
-        walletPublicKey: typeof publicKey === 'string' ? publicKey : publicKey.toString(),
-        selectedToken1Id: currentToken1.id,
-        selectedToken2Id: currentToken2.id,
-        minLpTokensCalculated: minLpTokensBigInt.toString(),
-      });
-
-      console.log('Pool creation min LP tokens (slippage adjusted):', {
-        rawGeometricMean: geometricMean.toString(),
-        minLpTokens: minLpTokensBigInt.toString(),
-      });
-      
-      let success = false;
-      
-      if (currentToken1.id === '0field' && currentToken2.id !== '0field') {
-        // ALEO + Token pool
-        const walletPublicKey =
-          typeof publicKey === 'string'
-            ? publicKey
-            : typeof publicKey === 'object' && 'toString' in publicKey
+      let result: FinalizedTransactionResult | null = null;
+      const walletPublicKey =
+        typeof publicKey === 'string'
+          ? publicKey
+          : typeof publicKey === 'object' && 'toString' in publicKey
             ? publicKey.toString()
             : String(publicKey);
 
-        console.log('Submitting createPoolNativeAleo (ALEO/TOKEN) with inputs:', {
-          walletPublicKey,
-          tokenId: currentToken2.id,
-          aleoAmountAtomic: amount1Atomic,
-          tokenAmountAtomic: amount2Atomic,
-          swapFeeBps: swapFee,
-          minLpTokensAtomic: minLpTokensBigInt.toString(),
-        });
+      const statusUpdater = (message: string) => updateTransaction(message);
 
-        success = await createPoolNativeAleo(
+      if (currentToken1.id === NATIVE_ALEO_ID && currentToken2.id !== NATIVE_ALEO_ID) {
+        result = await createPoolNativeAleo(
           wallet,
           walletPublicKey,
           currentToken2.id,
           amount1Atomic,
           amount2Atomic,
           swapFee,
-          minLpTokensBigInt
+          minLpTokensBigInt,
+          statusUpdater
         );
-      } else if (currentToken1.id !== '0field' && currentToken2.id === '0field') {
-        // Token + ALEO pool
-        const walletPublicKey =
-          typeof publicKey === 'string'
-            ? publicKey
-            : typeof publicKey === 'object' && 'toString' in publicKey
-            ? publicKey.toString()
-            : String(publicKey);
-
-        console.log('Submitting createPoolNativeAleo (TOKEN/ALEO) with inputs:', {
-          walletPublicKey,
-          tokenId: currentToken1.id,
-          aleoAmountAtomic: amount2Atomic,
-          tokenAmountAtomic: amount1Atomic,
-          swapFeeBps: swapFee,
-          minLpTokensAtomic: minLpTokensBigInt.toString(),
-        });
-
-        success = await createPoolNativeAleo(
+      } else if (currentToken1.id !== NATIVE_ALEO_ID && currentToken2.id === NATIVE_ALEO_ID) {
+        result = await createPoolNativeAleo(
           wallet,
           walletPublicKey,
           currentToken1.id,
           amount2Atomic,
           amount1Atomic,
           swapFee,
-          minLpTokensBigInt
+          minLpTokensBigInt,
+          statusUpdater
         );
-      } else if (currentToken1.id !== '0field' && currentToken2.id !== '0field') {
-        // Token + Token pool
-        const walletPublicKey =
-          typeof publicKey === 'string'
-            ? publicKey
-            : typeof publicKey === 'object' && 'toString' in publicKey
-            ? publicKey.toString()
-            : String(publicKey);
-
-        console.log('Submitting createPoolTokens with inputs:', {
-          walletPublicKey,
-          token1Id: currentToken1.id,
-          token2Id: currentToken2.id,
-          token1AmountAtomic: amount1Atomic,
-          token2AmountAtomic: amount2Atomic,
-          swapFeeBps: swapFee,
-          minLpTokensAtomic: minLpTokensBigInt.toString(),
-        });
-
-        success = await createPoolTokens(
+      } else if (currentToken1.id !== NATIVE_ALEO_ID && currentToken2.id !== NATIVE_ALEO_ID) {
+        result = await createPoolTokens(
           wallet,
           walletPublicKey,
           currentToken1.id,
@@ -386,275 +334,235 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
           amount1Atomic,
           amount2Atomic,
           swapFee,
-          minLpTokensBigInt
+          minLpTokensBigInt,
+          statusUpdater
         );
       } else {
-        throw new Error('Cannot create ALEO/ALEO pool');
+        throw new Error('Cannot create ALEO/ALEO pool.');
       }
-      
-      if (success) {
-        setStatus('Pool created successfully!');
-        setToken1Amount('');
-        setToken2Amount('');
-        onPoolUpdate();
-      } else {
-        throw new Error('Pool creation failed');
+
+      if (!result) {
+        throw new Error('Pool creation failed.');
       }
-      
+
+      succeedTransaction(result.txId, `Pool finalized: ${formatTxId(result.txId)}`);
+      setToken1Amount('');
+      setToken2Amount('');
+      onPoolUpdate();
     } catch (error) {
       console.error('Create pool error:', error);
-      setStatus(`Pool creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      failTransaction(`Pool creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsCreatingPool(false);
+      setActiveAction(null);
     }
   };
 
   // Add liquidity
   const handleAddLiquidity = async () => {
     if (!publicKey || !wallet) return;
-    
+
     const currentToken1 = selectedToken1 || token1;
     const currentToken2 = selectedToken2 || token2;
-    
+
     if (!currentToken1 || !currentToken2) {
-      setStatus('Please select both tokens');
+      failTransaction('Please select both tokens');
       return;
     }
-    
+
     try {
-      setIsAddingLiquidity(true);
-      setStatus('Adding liquidity...');
-      
+      setActiveAction('add');
+      startTransaction('Adding liquidity...');
+
       const amount1 = Number(token1Amount);
       const amount2 = Number(token2Amount);
-      
-      if (amount1 <= 0 || amount2 <= 0) {
-        throw new Error('Invalid amounts');
+
+      if (!Number.isFinite(amount1) || !Number.isFinite(amount2) || amount1 <= 0 || amount2 <= 0) {
+        throw new Error('Invalid token amounts.');
       }
-      
+
       const amount1Atomic = Math.floor(amount1 * Math.pow(10, currentToken1.decimals));
       const amount2Atomic = Math.floor(amount2 * Math.pow(10, currentToken2.decimals));
-      
-      // Calculate minimum LP tokens (respecting slippage tolerance)
+
+      if (amount1Atomic <= 0 || amount2Atomic <= 0) {
+        throw new Error('Token amounts must be greater than zero.');
+      }
+
       const minLpTokensBigInt = computeMinLpTokens(amount1Atomic, amount2Atomic);
-      console.log('Add liquidity min LP tokens (slippage adjusted):', minLpTokensBigInt.toString());
-      
-      let success = false;
-      
-      if (currentToken1.id === '0field' && currentToken2.id !== '0field') {
-        // ALEO + Token liquidity
-        const walletPublicKey =
-          typeof publicKey === 'string'
-            ? publicKey
-            : typeof publicKey === 'object' && 'toString' in publicKey
+      const walletPublicKey =
+        typeof publicKey === 'string'
+          ? publicKey
+          : typeof publicKey === 'object' && 'toString' in publicKey
             ? publicKey.toString()
             : String(publicKey);
 
-        console.log('Submitting addLiquidityNativeAleo (ALEO/TOKEN) with inputs:', {
-          walletPublicKey,
-          tokenId: currentToken2.id,
-          aleoAmountAtomic: amount1Atomic,
-          tokenAmountAtomic: amount2Atomic,
-          minLpTokensAtomic: minLpTokensBigInt.toString(),
-        });
+      let result: FinalizedTransactionResult | null = null;
+      const statusUpdater = (message: string) => updateTransaction(message);
 
-        success = await addLiquidityNativeAleo(
+      if (currentToken1.id === NATIVE_ALEO_ID && currentToken2.id !== NATIVE_ALEO_ID) {
+        result = await addLiquidityNativeAleo(
           wallet,
           walletPublicKey,
           currentToken2.id,
           amount1Atomic,
           amount2Atomic,
-          minLpTokensBigInt
+          minLpTokensBigInt,
+          statusUpdater
         );
-      } else if (currentToken1.id !== '0field' && currentToken2.id === '0field') {
-        // Token + ALEO liquidity
-        const walletPublicKey =
-          typeof publicKey === 'string'
-            ? publicKey
-            : typeof publicKey === 'object' && 'toString' in publicKey
-            ? publicKey.toString()
-            : String(publicKey);
-
-        console.log('Submitting addLiquidityNativeAleo (TOKEN/ALEO) with inputs:', {
-          walletPublicKey,
-          tokenId: currentToken1.id,
-          aleoAmountAtomic: amount2Atomic,
-          tokenAmountAtomic: amount1Atomic,
-          minLpTokensAtomic: minLpTokensBigInt.toString(),
-        });
-
-        success = await addLiquidityNativeAleo(
+      } else if (currentToken1.id !== NATIVE_ALEO_ID && currentToken2.id === NATIVE_ALEO_ID) {
+        result = await addLiquidityNativeAleo(
           wallet,
           walletPublicKey,
           currentToken1.id,
           amount2Atomic,
           amount1Atomic,
-          minLpTokensBigInt
+          minLpTokensBigInt,
+          statusUpdater
         );
-      } else if (currentToken1.id !== '0field' && currentToken2.id !== '0field') {
-        // Token + Token liquidity
-        const walletPublicKey =
-          typeof publicKey === 'string'
-            ? publicKey
-            : typeof publicKey === 'object' && 'toString' in publicKey
-            ? publicKey.toString()
-            : String(publicKey);
-
-        console.log('Submitting addLiquidityTokens with inputs:', {
-          walletPublicKey,
-          token1Id: currentToken1.id,
-          token2Id: currentToken2.id,
-          token1AmountAtomic: amount1Atomic,
-          token2AmountAtomic: amount2Atomic,
-          minLpTokensAtomic: minLpTokensBigInt.toString(),
-        });
-
-        success = await addLiquidityTokens(
+      } else if (currentToken1.id !== NATIVE_ALEO_ID && currentToken2.id !== NATIVE_ALEO_ID) {
+        result = await addLiquidityTokens(
           wallet,
           walletPublicKey,
           currentToken1.id,
           currentToken2.id,
           amount1Atomic,
           amount2Atomic,
-          minLpTokensBigInt
+          minLpTokensBigInt,
+          statusUpdater
         );
       } else {
-        throw new Error('Cannot add ALEO/ALEO liquidity');
+        throw new Error('Cannot add ALEO/ALEO liquidity.');
       }
-      
-      if (success) {
-        setStatus('Liquidity added successfully!');
-        setToken1Amount('');
-        setToken2Amount('');
-        onPoolUpdate();
-      } else {
-        throw new Error('Add liquidity failed');
+
+      if (!result) {
+        throw new Error('Add liquidity failed.');
       }
-      
+
+      succeedTransaction(result.txId, `Liquidity finalized: ${formatTxId(result.txId)}`);
+      setToken1Amount('');
+      setToken2Amount('');
+      onPoolUpdate();
     } catch (error) {
       console.error('Add liquidity error:', error);
-      setStatus(`Add liquidity failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      failTransaction(`Add liquidity failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsAddingLiquidity(false);
+      setActiveAction(null);
     }
   };
 
   // Remove liquidity
   const handleRemoveLiquidity = async () => {
     if (!publicKey || !wallet || !userPosition || !poolInfo) return;
-    
+
     const currentToken1 = selectedToken1 || token1;
     const currentToken2 = selectedToken2 || token2;
-    
-    if (!currentToken1 || !currentToken2) {
-      setStatus('Please select both tokens');
-      return;
-    }
-    
-    // Validate pool data
-    if (!poolInfo.lpTotalSupply || poolInfo.lpTotalSupply === 0n) {
-      setStatus('Pool data incomplete. Please refresh and try again.');
-      return;
-    }
-    
-    try {
-      setIsRemovingLiquidity(true);
-      setStatus('Removing liquidity...');
-      
-      const lpTokensToBurn = userPosition.lpTokens;
-      
-      if (!poolInfo.token1Id || !poolInfo.token2Id) {
-        throw new Error('Pool metadata missing token identifiers.');
-      }
-      
-      const token1Id = poolInfo.token1Id;
-      const token2Id = poolInfo.token2Id;
-      
-      const expectedToken1Out = (poolInfo.reserve1 * lpTokensToBurn) / poolInfo.lpTotalSupply;
-      const expectedToken2Out = (poolInfo.reserve2 * lpTokensToBurn) / poolInfo.lpTotalSupply;
-      
-      const minToken1Out = (expectedToken1Out * slippageFactorBigInt) / 10000n;
-      const minToken2Out = (expectedToken2Out * slippageFactorBigInt) / 10000n;
-      
-      const expectedByToken: Record<string, bigint> = {
-        [token1Id]: expectedToken1Out,
-        [token2Id]: expectedToken2Out,
-      };
-      const minByToken: Record<string, bigint> = {
-        [token1Id]: minToken1Out,
-        [token2Id]: minToken2Out,
-      };
-      
-      console.log('Removing liquidity with calculated amounts:', {
-        lpTokensToBurn: lpTokensToBurn.toString(),
-        expectedToken1Out: expectedToken1Out.toString(),
-        expectedToken2Out: expectedToken2Out.toString(),
-        minToken1Out: minToken1Out.toString(),
-        minToken2Out: minToken2Out.toString(),
-        token1Id,
-        token2Id
-      });
-      
-      let success = false;
-      
-      const isNativePool = token1Id === NATIVE_ALEO_ID || token2Id === NATIVE_ALEO_ID;
-      
-      if (isNativePool) {
-        const aleoTokenId = token1Id === NATIVE_ALEO_ID ? token1Id : token2Id;
-        const otherTokenId = token1Id === NATIVE_ALEO_ID ? token2Id : token1Id;
-        const expectedAleoOut = expectedByToken[aleoTokenId];
-        const expectedOtherOut = expectedByToken[otherTokenId];
-        const minAleoOut = minByToken[aleoTokenId];
-        const minOtherOut = minByToken[otherTokenId];
-        if (expectedAleoOut === undefined || expectedOtherOut === undefined || minAleoOut === undefined || minOtherOut === undefined) {
-          throw new Error('Failed to compute expected/min outputs for native pool removal.');
-        }
 
-        success = await removeLiquidityNativeAleo(
+    if (!currentToken1 || !currentToken2) {
+      failTransaction('Please select both tokens');
+      return;
+    }
+
+    const totalSupply = poolInfo.lpTotalSupply ?? 0n;
+    if (totalSupply <= 0n) {
+      throw new Error('Pool data incomplete. Please refresh and try again.');
+    }
+
+    try {
+      setActiveAction('remove');
+      startTransaction('Removing liquidity...');
+
+      const lpTokensToBurn = userPosition.lpTokens;
+      if (lpTokensToBurn <= 0n) {
+        throw new Error('No LP tokens to remove.');
+      }
+
+      const poolToken1Id = poolInfo.token1Id ?? currentToken1.id;
+      const poolToken2Id = poolInfo.token2Id ?? currentToken2.id;
+      const expectedToken1OutBase = (poolInfo.reserve1 * lpTokensToBurn) / totalSupply;
+      const expectedToken2OutBase = (poolInfo.reserve2 * lpTokensToBurn) / totalSupply;
+      const minToken1OutValue = (expectedToken1OutBase * slippageFactorBigInt) / 10000n;
+      const minToken2OutValue = (expectedToken2OutBase * slippageFactorBigInt) / 10000n;
+
+      const getExpectedOut = (tokenId: string) =>
+        tokenId === poolToken1Id ? expectedToken1OutBase : expectedToken2OutBase;
+      const getMinOut = (tokenId: string) =>
+        tokenId === poolToken1Id ? minToken1OutValue : minToken2OutValue;
+
+      const walletAddress =
+        typeof publicKey === 'string'
+          ? publicKey
+          : typeof publicKey === 'object' && 'toString' in publicKey
+            ? publicKey.toString()
+            : String(publicKey);
+
+      let result: FinalizedTransactionResult | null = null;
+      const statusUpdater = (message: string) => updateTransaction(message);
+
+      if (currentToken1.id === NATIVE_ALEO_ID && currentToken2.id !== NATIVE_ALEO_ID) {
+        const expectedAleoOut = getExpectedOut(NATIVE_ALEO_ID);
+        const expectedTokenOut = getExpectedOut(currentToken2.id);
+        const minAleoOut = getMinOut(NATIVE_ALEO_ID);
+        const minTokenOut = getMinOut(currentToken2.id);
+
+        result = await removeLiquidityNativeAleo(
           wallet,
-          publicKey.toString(),
-          otherTokenId,
+          walletAddress,
+          currentToken2.id,
           lpTokensToBurn,
           minAleoOut,
-          minOtherOut,
+          minTokenOut,
           expectedAleoOut,
-          expectedOtherOut
+          expectedTokenOut,
+          statusUpdater
         );
-      } else {
-        if (
-          expectedByToken[token1Id] === undefined ||
-          expectedByToken[token2Id] === undefined ||
-          minByToken[token1Id] === undefined ||
-          minByToken[token2Id] === undefined
-        ) {
-          throw new Error('Failed to compute expected/min outputs for token pair removal.');
-        }
+      } else if (currentToken1.id !== NATIVE_ALEO_ID && currentToken2.id === NATIVE_ALEO_ID) {
+        const expectedAleoOut = getExpectedOut(NATIVE_ALEO_ID);
+        const expectedTokenOut = getExpectedOut(currentToken1.id);
+        const minAleoOut = getMinOut(NATIVE_ALEO_ID);
+        const minTokenOut = getMinOut(currentToken1.id);
 
-        success = await removeLiquidityTokens(
+        result = await removeLiquidityNativeAleo(
           wallet,
-          publicKey.toString(),
-          token1Id,
-          token2Id,
+          walletAddress,
+          currentToken1.id,
           lpTokensToBurn,
-          minByToken[token1Id]!,
-          minByToken[token2Id]!,
-          expectedByToken[token1Id]!,
-          expectedByToken[token2Id]!
+          minAleoOut,
+          minTokenOut,
+          expectedAleoOut,
+          expectedTokenOut,
+          statusUpdater
+        );
+      } else {
+        const expectedToken1 = getExpectedOut(currentToken1.id);
+        const expectedToken2 = getExpectedOut(currentToken2.id);
+        const minToken1 = getMinOut(currentToken1.id);
+        const minToken2 = getMinOut(currentToken2.id);
+
+        result = await removeLiquidityTokens(
+          wallet,
+          walletAddress,
+          currentToken1.id,
+          currentToken2.id,
+          lpTokensToBurn,
+          minToken1,
+          minToken2,
+          expectedToken1,
+          expectedToken2,
+          statusUpdater
         );
       }
-      
-      if (success) {
-        setStatus('Liquidity removed successfully!');
-        onPoolUpdate();
-      } else {
-        throw new Error('Remove liquidity failed');
+
+      if (!result) {
+        throw new Error('Remove liquidity failed.');
       }
-      
+
+      succeedTransaction(result.txId, `Liquidity removal finalized: ${formatTxId(result.txId)}`);
+      setUserPosition(null);
+      onPoolUpdate();
     } catch (error) {
       console.error('Remove liquidity error:', error);
-      setStatus(`Remove liquidity failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      failTransaction(`Remove liquidity failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setIsRemovingLiquidity(false);
+      setActiveAction(null);
     }
   };
 
@@ -678,9 +586,27 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
     return formatWithCommas(trimmed);
   };
 
+  const isCreatePending = txPending && activeAction === 'create';
+  const isAddPending = txPending && activeAction === 'add';
+  const isRemovePending = txPending && activeAction === 'remove';
+  const hasStatus = Boolean(statusMessage);
+  const isStatusError = Boolean(txError);
+  const isStatusSuccess = Boolean(txResultId) && !txError;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg">
-      <div className="space-y-6">
+    <Modal isOpen={isOpen} onClose={onClose} title="Manage Pool">
+      <div className="relative space-y-4">
+        {txPending && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-sm pointer-events-none rounded-2xl">
+            <div className="flex flex-col items-center gap-4 bg-white/90 border border-primary/40 shadow-xl rounded-3xl px-10 py-8">
+              <div className="text-5xl">💧</div>
+              <LoadingSpinner size="small" />
+              <p className="text-sm font-semibold text-gray-700 text-center">
+                {statusMessage || 'Waiting for transaction to finalize...'}
+              </p>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="text-center">
           <h3 className="text-xl font-semibold text-gray-800 mb-2">
@@ -975,10 +901,10 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
             {/* Create Pool Button */}
             <button
               onClick={handleCreatePool}
-              disabled={!canCreatePool || isCreatingPool}
-              className="w-full py-3 px-4 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              disabled={!canCreatePool || txPending}
+              className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              {isCreatingPool ? 'Creating Pool...' : 'Create Pool'}
+              {isCreatePending ? 'Creating Pool...' : 'Create Pool'}
             </button>
           </div>
         )}
@@ -1026,10 +952,10 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
             {/* Add Liquidity Button */}
             <button
               onClick={handleAddLiquidity}
-              disabled={!canAddLiquidity || isAddingLiquidity}
+              disabled={!canAddLiquidity || txPending}
               className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              {isAddingLiquidity ? 'Adding Liquidity...' : 'Add Liquidity'}
+              {isAddPending ? 'Adding Liquidity...' : 'Add Liquidity'}
             </button>
           </div>
         )}
@@ -1055,10 +981,10 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
 
                 <button
                   onClick={handleRemoveLiquidity}
-                  disabled={!canRemoveLiquidity || isRemovingLiquidity}
+                  disabled={!canRemoveLiquidity || txPending}
                   className="w-full py-3 px-4 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isRemovingLiquidity ? 'Removing Liquidity...' : 'Remove All Liquidity'}
+                  {isRemovePending ? 'Removing Liquidity...' : 'Remove All Liquidity'}
                 </button>
               </>
             ) : (
@@ -1071,15 +997,35 @@ export const PoolManagementModal: React.FC<PoolManagementModalProps> = ({
         )}
 
         {/* Status */}
-        {status && (
-          <div className={`p-4 rounded-xl border ${
-            status.includes('failed') || status.includes('error') 
-              ? 'bg-red-50 border-red-200 text-red-800' 
-              : status.includes('successfully') 
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-blue-50 border-blue-200 text-blue-800'
-          }`}>
-            <div className="text-center font-medium">{status}</div>
+        {hasStatus && (
+          <div
+            className={`p-4 rounded-xl border ${
+              isStatusError
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : isStatusSuccess
+                  ? 'bg-green-50 border-green-200 text-green-800'
+                  : 'bg-blue-50 border-blue-200 text-blue-800'
+            }`}
+          >
+            <div className="text-center font-medium">{statusMessage}</div>
+            {isStatusSuccess && txResultId && (
+              <div className="text-center text-xs mt-1 text-current">
+                Tx:{' '}
+                <a
+                  href={explorerTxUrl(txResultId)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  {formatTxId(txResultId)}
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+        {txError && (
+          <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200 text-center text-yellow-800 text-sm">
+            Tip: verify balances, slippage, or pool liquidity if this keeps failing.
           </div>
         )}
 

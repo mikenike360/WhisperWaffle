@@ -22,6 +22,7 @@ function formatUnknownError(error: unknown, context: string): string {
 import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
 import { CURRENT_NETWORK, PROGRAM_ID, NATIVE_ALEO_ID } from '../types';
 import { calculateLPTokens, calculateOptimalLiquidity, validatePoolRatio } from './ammCalculations';
+import { executeWithFinalization, FinalizedTransactionResult } from './transaction';
 
 // New AMM DEX function names
 const CREATE_POOL_NATIVE_ALEO = 'create_pool_native_aleo';
@@ -103,8 +104,9 @@ export async function createPoolNativeAleo(
   aleoAmount: number,
   tokenAmount: number,
   swapFee: number = 30,
-  minLpTokens: number | bigint
-): Promise<boolean> {
+  minLpTokens: number | bigint,
+  onStatus?: (status: string) => void
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -183,98 +185,10 @@ export async function createPoolNativeAleo(
       false
     );
     
-    // Check transaction object
-    if (!txDex) {
-      throw new Error('Transaction.createTransaction returned null/undefined');
-    }
-    if (!txDex.transitions || txDex.transitions.length === 0) {
-      throw new Error(
-        `Transaction missing transitions. Raw transaction: ${JSON.stringify(txDex)}`
-      );
-    }
-    if (!txDex.address || !txDex.chainId) {
-      throw new Error(
-        `Transaction missing required fields (address or chainId). Raw transaction: ${JSON.stringify(
-          txDex
-        )}`
-      );
-    }
-
-    console.log('Transaction object validated successfully');
-    console.log('Transaction created successfully:', {
-      tx: txDex,
-      address: txDex?.address,
-      chainId: txDex?.chainId,
-      transitions: txDex?.transitions,
-      fee: txDex?.fee,
-      feePrivate: txDex?.feePrivate,
-      transitionCount: txDex?.transitions?.length
-    });
-    
-    // Log each transition in detail
-    if (txDex.transitions.length > 0) {
-      const transition = txDex.transitions[0];
-      console.log('First transition details:', {
-        program: transition.program,
-        functionName: transition.functionName,
-        inputs: transition.inputs,
-        id: transition.id,
-        tpk: (transition as any).tpk,
-        tcm: (transition as any).tcm
-      });
-    }
-
-    // Submit the transaction through the wallet adapter (direct call like working examples)
-    let txId: string;
-    try {
-      txId = await wallet.adapter.requestTransaction(txDex);
-      console.log('Transaction submitted with ID:', txId);
-    } catch (walletError: any) {
-      console.error('Wallet adapter error details (createPoolNativeAleo):', {
-        message: walletError?.message,
-        code: walletError?.code,
-        name: walletError?.name,
-        stack: walletError?.stack,
-        fullError: walletError,
-        inputs: createPoolInputs,
-        publicKey,
-        tokenId,
-        aleoAmount,
-        tokenAmount,
-        swapFee,
-        minLpTokens,
-        network: CURRENT_NETWORK,
-      });
-      throw walletError;
-    }
-    
-    // Poll for finalization (matching working pattern from other utils)
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      try {
-        const status = await wallet.adapter.transactionStatus(txId);
-        console.log(`Transaction status check ${attempt + 1}: ${status}`);
-        
-        if (status === 'Finalized') {
-          finalized = true;
-          break;
-        }
-        
-        await new Promise((res) => setTimeout(res, 2000));
-      } catch (error) {
-        console.log(`Status check attempt ${attempt + 1} failed:`, error);
-        await new Promise((res) => setTimeout(res, 2000));
-      }
-    }
-
-    if (!finalized) {
-      throw new Error('Transaction not finalized in time. Check the transaction ID manually.');
-    }
-    
-    console.log('Transaction finalized successfully!');
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Pool created successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     const message = formatUnknownError(error, 'createPoolNativeAleo');
@@ -315,8 +229,9 @@ export async function createPoolTokens(
   token1Amount: number,
   token2Amount: number,
   swapFee: number = 30,
-  minLpTokens: number | bigint
-): Promise<boolean> {
+  minLpTokens: number | bigint,
+  onStatus?: (status: string) => void
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -375,7 +290,6 @@ export async function createPoolTokens(
 
     console.log('Submitting AMM pool creation (token + token):', createPoolInputs);
 
-    // Create the transaction
     const txDex = Transaction.createTransaction(
       publicKey,
       CURRENT_NETWORK,
@@ -386,63 +300,10 @@ export async function createPoolTokens(
       false
     );
     
-    // Check transaction object
-    if (!txDex) {
-      throw new Error('Transaction.createTransaction returned null/undefined');
-    }
-    if (!txDex.transitions || txDex.transitions.length === 0) {
-      throw new Error('Transaction missing transitions');
-    }
-    if (!txDex.address || !txDex.chainId) {
-      throw new Error('Transaction missing required fields (address or chainId)');
-    }
-
-    console.log('Transaction object validated successfully');
-    console.log('Transaction created:', txDex);
-
-    // Submit the transaction through the wallet adapter (direct call like working examples)
-    let txId: string;
-    try {
-      txId = await wallet.adapter.requestTransaction(txDex);
-      console.log('Transaction submitted with ID:', txId);
-    } catch (walletError: any) {
-      console.error('Wallet adapter error details:', {
-        message: walletError?.message,
-        code: walletError?.code,
-        name: walletError?.name,
-        stack: walletError?.stack,
-        fullError: walletError
-      });
-      throw walletError;
-    }
-    
-    // Poll for finalization (matching working pattern from other utils)
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      try {
-        const status = await wallet.adapter.transactionStatus(txId);
-        console.log(`Transaction status check ${attempt + 1}: ${status}`);
-        
-        if (status === 'Finalized') {
-          finalized = true;
-          break;
-        }
-        
-        await new Promise((res) => setTimeout(res, 2000));
-      } catch (error) {
-        console.log(`Status check attempt ${attempt + 1} failed:`, error);
-        await new Promise((res) => setTimeout(res, 2000));
-      }
-    }
-
-    if (!finalized) {
-      throw new Error('Transaction not finalized in time. Check the transaction ID manually.');
-    }
-    
-    console.log('Transaction finalized successfully!');
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Pool created successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     const message = formatUnknownError(error, 'createPoolTokens');
@@ -467,8 +328,9 @@ export async function addLiquidityNativeAleo(
   tokenId: string,
   aleoAmount: number,
   tokenAmount: number,
-  minLpTokens: number | bigint
-): Promise<boolean> {
+  minLpTokens: number | bigint,
+  onStatus?: (status: string) => void
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -509,39 +371,10 @@ export async function addLiquidityNativeAleo(
       false
     );
     
-    console.log('Transaction created:', txDex);
-
-    // Submit the transaction through the wallet adapter (direct call like working examples)
-    const txId = await wallet.adapter.requestTransaction(txDex);
-    console.log('Transaction submitted with ID:', txId);
-    
-    // Poll for finalization (matching working pattern from other utils)
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      try {
-        const status = await wallet.adapter.transactionStatus(txId);
-        console.log(`Transaction status check ${attempt + 1}: ${status}`);
-        
-        if (status === 'Finalized') {
-          finalized = true;
-          break;
-        }
-        
-        await new Promise((res) => setTimeout(res, 2000));
-      } catch (error) {
-        console.log(`Status check attempt ${attempt + 1} failed:`, error);
-        await new Promise((res) => setTimeout(res, 2000));
-      }
-    }
-
-    if (!finalized) {
-      throw new Error('Transaction not finalized in time. Check the transaction ID manually.');
-    }
-    
-    console.log('Transaction finalized successfully!');
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Liquidity added successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     const message = formatUnknownError(error, 'addLiquidityNativeAleo');
@@ -568,8 +401,9 @@ export async function addLiquidityTokens(
   token2Id: string,
   token1Amount: number,
   token2Amount: number,
-  minLpTokens: number | bigint
-): Promise<boolean> {
+  minLpTokens: number | bigint,
+  onStatus?: (status: string) => void
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -611,40 +445,10 @@ export async function addLiquidityTokens(
       fee,
       false
     );
-    
-    console.log('Transaction created:', txDex);
-
-    // Submit the transaction through the wallet adapter (direct call like working examples)
-    const txId = await wallet.adapter.requestTransaction(txDex);
-    console.log('Transaction submitted with ID:', txId);
-    
-    // Poll for finalization (matching working pattern from other utils)
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      try {
-        const status = await wallet.adapter.transactionStatus(txId);
-        console.log(`Transaction status check ${attempt + 1}: ${status}`);
-        
-        if (status === 'Finalized') {
-          finalized = true;
-          break;
-        }
-        
-        await new Promise((res) => setTimeout(res, 2000));
-      } catch (error) {
-        console.log(`Status check attempt ${attempt + 1} failed:`, error);
-        await new Promise((res) => setTimeout(res, 2000));
-      }
-    }
-
-    if (!finalized) {
-      throw new Error('Transaction not finalized in time. Check the transaction ID manually.');
-    }
-    
-    console.log('Transaction finalized successfully!');
+    const txId = await executeWithFinalization(wallet, txDex, onStatus);
 
     console.log('Liquidity added successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     const message = formatUnknownError(error, 'addLiquidityTokens');
@@ -661,8 +465,9 @@ export async function removeLiquidityNativeAleo(
   minAleoOut: bigint,
   minTokenOut: bigint,
   expectedAleoOut: bigint,
-  expectedTokenOut: bigint
-): Promise<boolean> {
+  expectedTokenOut: bigint,
+  onStatus?: (status: string) => void
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -707,34 +512,10 @@ export async function removeLiquidityNativeAleo(
       false
     );
     
-    console.log('Transaction created:', txDex);
+    const txId = await executeWithFinalization(wallet, txDex, onStatus, { intervalMs: 1000, maxAttempts: 120 });
 
-    const txId = await wallet.adapter.requestTransaction(txDex);
-    console.log('Transaction submitted with ID:', txId);
-    
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      try {
-        const status = await wallet.adapter.transactionStatus(txId);
-        console.log(`Transaction status check ${attempt + 1}: ${status}`);
-        if (status === 'Finalized') {
-          finalized = true;
-          break;
-        }
-        await new Promise((res) => setTimeout(res, 2000));
-      } catch (error) {
-        console.log(`Status check attempt ${attempt + 1} failed:`, error);
-        await new Promise((res) => setTimeout(res, 2000));
-      }
-    }
-
-    if (!finalized) {
-      throw new Error('Transaction not finalized in time. Check the transaction ID manually.');
-    }
-    
-    console.log('Transaction finalized successfully!');
     console.log('Liquidity removed successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     console.error('Error removing liquidity:', error);
@@ -751,8 +532,9 @@ export async function removeLiquidityTokens(
   minToken1Out: bigint,
   minToken2Out: bigint,
   expectedToken1Out: bigint,
-  expectedToken2Out: bigint
-): Promise<boolean> {
+  expectedToken2Out: bigint,
+  onStatus?: (status: string) => void
+): Promise<FinalizedTransactionResult> {
   try {
     if (!wallet?.adapter) {
       throw new Error('Wallet not connected');
@@ -799,34 +581,10 @@ export async function removeLiquidityTokens(
       false
     );
     
-    console.log('Transaction created:', txDex);
+    const txId = await executeWithFinalization(wallet, txDex, onStatus, { intervalMs: 1000, maxAttempts: 120 });
 
-    const txId = await wallet.adapter.requestTransaction(txDex);
-    console.log('Transaction submitted with ID:', txId);
-    
-    let finalized = false;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      try {
-        const status = await wallet.adapter.transactionStatus(txId);
-        console.log(`Transaction status check ${attempt + 1}: ${status}`);
-        if (status === 'Finalized') {
-          finalized = true;
-          break;
-        }
-        await new Promise((res) => setTimeout(res, 2000));
-      } catch (error) {
-        console.log(`Status check attempt ${attempt + 1} failed:`, error);
-        await new Promise((res) => setTimeout(res, 2000));
-      }
-    }
-
-    if (!finalized) {
-      throw new Error('Transaction not finalized in time. Check the transaction ID manually.');
-    }
-    
-    console.log('Transaction finalized successfully!');
     console.log('Liquidity removed successfully!');
-    return true;
+    return { txId };
 
   } catch (error) {
     console.error('Error removing liquidity:', error);
